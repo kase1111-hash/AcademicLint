@@ -1,0 +1,77 @@
+name: computer-science
+description: Computer science and programming terminology
+
+technical_terms:
+  - algorithm
+  - data structure
+  - complexity
+  - recursion
+  - iteration
+  - polymorphism
+  - encapsulation
+  - inheritance
+  - abstraction
+  - interface
+  - implementation
+  - runtime
+  - compile time
+  - memory allocation
+  - garbage collection
+  - stack
+  - heap
+  - queue
+  - tree
+  - graph
+  - hash table
+  - linked list
+  - binary search
+  - sorting
+  - traversal
+  - optimization
+  - concurrency
+  - parallelism
+  - thread
+  - process
+  - mutex
+  - semaphore
+  - deadlock
+  - race condition
+  - API
+  - REST
+  - microservice
+  - monolith
+  - database
+  - query
+  - index
+  - normalization
+  - denormalization
+  - cache
+  - latency
+  - throughput
+  - scalability
+  - availability
+  - consistency
+  - partition tolerance
+  - machine learning
+  - neural network
+  - deep learning
+  - training
+  - inference
+  - model
+  - hyperparameter
+  - overfitting
+  - underfitting
+  - regularization
+
+domain_weasels:
+  - "best practice"
+  - "industry standard"
+  - "modern approach"
+
+permitted_hedges:
+  - "typically"
+  - "in most implementations"
+  - "depending on the use case"
+
+density_baseline: 0.55
+density_strict: 0.70

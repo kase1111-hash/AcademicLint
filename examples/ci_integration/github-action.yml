@@ -1,0 +1,49 @@
+# GitHub Actions workflow for AcademicLint
+# Add this file to .github/workflows/lint-docs.yml in your repository
+
+name: Documentation Quality
+
+on:
+  pull_request:
+    paths:
+      - 'docs/**'
+      - '**.md'
+
+jobs:
+  academiclint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install AcademicLint
+        run: pip install academiclint
+
+      - name: Download models
+        run: academiclint setup
+
+      - name: Run analysis
+        run: |
+          academiclint check docs/ \
+            --format github \
+            --level standard \
+            --min-density 0.45 \
+            --fail-under 0.40
+
+      - name: Generate report
+        if: always()
+        run: |
+          academiclint check docs/ \
+            --format markdown \
+            --output report.md
+
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: academiclint-report
+          path: report.md

@@ -1,0 +1,68 @@
+name: philosophy
+description: Philosophical terminology and concepts
+
+technical_terms:
+  - epistemology
+  - ontology
+  - metaphysics
+  - phenomenology
+  - hermeneutics
+  - dialectic
+  - a priori
+  - a posteriori
+  - empiricism
+  - rationalism
+  - pragmatism
+  - existentialism
+  - nihilism
+  - determinism
+  - libertarianism
+  - compatibilism
+  - dualism
+  - monism
+  - materialism
+  - idealism
+  - realism
+  - nominalism
+  - universals
+  - particulars
+  - substance
+  - essence
+  - contingent
+  - necessary
+  - sufficient
+  - syllogism
+  - deduction
+  - induction
+  - abduction
+  - fallacy
+  - validity
+  - soundness
+  - axiom
+  - theorem
+  - proposition
+  - predicate
+  - teleology
+  - deontology
+  - consequentialism
+  - utilitarianism
+  - virtue ethics
+  - categorical imperative
+  - moral realism
+  - moral relativism
+  - epistemic
+  - doxastic
+  - alethic
+
+domain_weasels:
+  - "philosophers agree"
+  - "philosophy tells us"
+  - "deep down"
+
+permitted_hedges:
+  - "arguably"
+  - "one might contend"
+  - "it could be argued"
+
+density_baseline: 0.55
+density_strict: 0.70
