@@ -1,0 +1,67 @@
+# =============================================================================
+# AcademicLint Development Environment Configuration
+# =============================================================================
+# This configuration is optimized for local development with verbose output
+# and relaxed settings for faster iteration.
+# =============================================================================
+
+# Environment identifier
+environment: development
+
+# Analysis settings (relaxed for development)
+analysis:
+  level: standard
+  min_density: 0.40
+  fail_under: null  # Don't fail during development
+
+# Logging configuration
+logging:
+  level: DEBUG
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  handlers:
+    - console
+
+# Output settings
+output:
+  format: terminal
+  color: true
+  show_suggestions: true
+  show_examples: true
+  verbose: true
+
+# API server settings
+api:
+  host: "127.0.0.1"
+  port: 8080
+  workers: 1
+  reload: true
+  debug: true
+  cors_origins:
+    - "http://localhost:3000"
+    - "http://127.0.0.1:3000"
+
+# Performance settings
+performance:
+  cache_enabled: true
+  cache_ttl: 300  # 5 minutes
+  max_workers: 2
+  timeout: 60
+
+# Error reporting (disabled in development)
+error_reporting:
+  sentry_enabled: false
+  sentry_dsn: null
+  sentry_environment: development
+  sentry_traces_sample_rate: 1.0
+
+# Metrics collection (verbose in development)
+metrics:
+  enabled: true
+  detailed: true
+  export_interval: 10
+
+# Feature flags
+features:
+  experimental_detectors: true
+  beta_features: true
+  debug_mode: true

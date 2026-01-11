@@ -1,0 +1,65 @@
+# =============================================================================
+# AcademicLint Default Configuration
+# =============================================================================
+# Base configuration that all environments inherit from.
+# Environment-specific configs override these values.
+# =============================================================================
+
+# Environment identifier (overridden by specific configs)
+environment: development
+
+# Analysis settings
+analysis:
+  level: standard  # relaxed, standard, strict, academic
+  min_density: 0.50
+  fail_under: null
+
+# Logging configuration
+logging:
+  level: INFO
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  handlers:
+    - console
+
+# Output settings
+output:
+  format: terminal
+  color: true
+  show_suggestions: true
+  show_examples: true
+  verbose: false
+
+# API server settings
+api:
+  host: "0.0.0.0"
+  port: 8080
+  workers: 1
+  reload: false
+  debug: false
+  cors_origins: []
+
+# Performance settings
+performance:
+  cache_enabled: true
+  cache_ttl: 600
+  max_workers: 4
+  timeout: 30
+
+# Error reporting
+error_reporting:
+  sentry_enabled: false
+  sentry_dsn: null
+  sentry_environment: null
+  sentry_traces_sample_rate: 0.0
+
+# Metrics collection
+metrics:
+  enabled: false
+  detailed: false
+  export_interval: 60
+
+# Feature flags
+features:
+  experimental_detectors: false
+  beta_features: false
+  debug_mode: false
