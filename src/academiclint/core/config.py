@@ -6,6 +6,12 @@ from typing import Optional
 
 import yaml
 
+from academiclint.core.exceptions import ConfigurationError
+
+# Valid values for configuration options
+VALID_LEVELS = frozenset({"relaxed", "standard", "strict", "academic"})
+VALID_OUTPUT_FORMATS = frozenset({"terminal", "json", "html", "markdown", "github"})
+
 
 @dataclass
 class OutputConfig:
@@ -15,6 +21,18 @@ class OutputConfig:
     color: bool = True
     show_suggestions: bool = True
     show_examples: bool = True
+
+    def __post_init__(self):
+        """Validate output configuration after initialization."""
+        self._validate()
+
+    def _validate(self) -> None:
+        """Validate output configuration values."""
+        if self.format not in VALID_OUTPUT_FORMATS:
+            raise ConfigurationError(
+                f"Invalid output format '{self.format}'. "
+                f"Valid options: {', '.join(sorted(VALID_OUTPUT_FORMATS))}"
+            )
 
 
 @dataclass
@@ -42,6 +60,72 @@ class Config:
     # Thresholds (derived from level if not set)
     fail_under: Optional[float] = None  # Exit with error if below
 
+    def __post_init__(self):
+        """Validate configuration after initialization."""
+        self._validate()
+
+    def _validate(self) -> None:
+        """Validate configuration values.
+
+        Raises:
+            ConfigurationError: If any configuration value is invalid
+        """
+        # Validate level
+        if self.level not in VALID_LEVELS:
+            raise ConfigurationError(
+                f"Invalid level '{self.level}'. "
+                f"Valid options: {', '.join(sorted(VALID_LEVELS))}"
+            )
+
+        # Validate min_density
+        if not isinstance(self.min_density, (int, float)):
+            raise ConfigurationError(
+                f"min_density must be a number, got {type(self.min_density).__name__}"
+            )
+        if not 0.0 <= self.min_density <= 1.0:
+            raise ConfigurationError(
+                f"min_density must be between 0.0 and 1.0, got {self.min_density}"
+            )
+
+        # Validate fail_under
+        if self.fail_under is not None:
+            if not isinstance(self.fail_under, (int, float)):
+                raise ConfigurationError(
+                    f"fail_under must be a number, got {type(self.fail_under).__name__}"
+                )
+            if not 0.0 <= self.fail_under <= 1.0:
+                raise ConfigurationError(
+                    f"fail_under must be between 0.0 and 1.0, got {self.fail_under}"
+                )
+
+        # Validate domain_file exists if specified
+        if self.domain_file is not None:
+            path = Path(self.domain_file)
+            if not path.exists():
+                raise ConfigurationError(f"Domain file not found: {self.domain_file}")
+            if not path.is_file():
+                raise ConfigurationError(
+                    f"Domain file path is not a file: {self.domain_file}"
+                )
+
+        # Validate domain_terms is a list of strings
+        if not isinstance(self.domain_terms, list):
+            raise ConfigurationError("domain_terms must be a list")
+        for term in self.domain_terms:
+            if not isinstance(term, str):
+                raise ConfigurationError(
+                    f"All domain_terms must be strings, got {type(term).__name__}"
+                )
+
+        # Validate additional_weasels is a list of strings
+        if not isinstance(self.additional_weasels, list):
+            raise ConfigurationError("additional_weasels must be a list")
+        for weasel in self.additional_weasels:
+            if not isinstance(weasel, str):
+                raise ConfigurationError(
+                    f"All additional_weasels must be strings, got {type(weasel).__name__}"
+                )
+
     @classmethod
     def from_file(
         cls, path: Path | str, overrides: Optional[dict] = None
@@ -54,10 +138,26 @@ class Config:
 
         Returns:
             Config instance with loaded settings
+
+        Raises:
+            ConfigurationError: If the file is invalid or values are invalid
+            FileNotFoundError: If the config file doesn't exist
         """
         path = Path(path)
-        with path.open() as f:
-            data = yaml.safe_load(f) or {}
+
+        if not path.exists():
+            raise FileNotFoundError(f"Configuration file not found: {path}")
+
+        try:
+            with path.open() as f:
+                data = yaml.safe_load(f) or {}
+        except yaml.YAMLError as e:
+            raise ConfigurationError(f"Invalid YAML in configuration file: {e}")
+
+        if not isinstance(data, dict):
+            raise ConfigurationError(
+                f"Configuration file must contain a YAML mapping, got {type(data).__name__}"
+            )
 
         if overrides:
             data.update(overrides)
@@ -66,7 +166,10 @@ class Config:
         output_data = data.pop("output", {})
         output_config = OutputConfig(**output_data) if output_data else OutputConfig()
 
-        return cls(output=output_config, **data)
+        try:
+            return cls(output=output_config, **data)
+        except TypeError as e:
+            raise ConfigurationError(f"Unknown configuration option: {e}")
 
     def get_level_thresholds(self) -> dict:
         """Get thresholds based on the configured level.
