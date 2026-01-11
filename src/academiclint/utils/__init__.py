@@ -11,8 +11,16 @@ from academiclint.utils.patterns import (
     WEASEL_PATTERNS,
 )
 from academiclint.utils.text import extract_context, get_line_column
+from academiclint.utils.validation import (
+    ValidationError,
+    validate_file_path,
+    validate_paths,
+    validate_text,
+    sanitize_pattern,
+)
 
 __all__ = [
+    # Patterns
     "VAGUE_TERMS",
     "CAUSAL_PATTERNS",
     "CITATION_PATTERNS",
@@ -21,6 +29,13 @@ __all__ = [
     "FILLER_PHRASES",
     "FUNCTION_WORDS",
     "NEEDS_CITATION_PATTERNS",
+    # Text utilities
     "extract_context",
     "get_line_column",
+    # Validation
+    "ValidationError",
+    "validate_file_path",
+    "validate_paths",
+    "validate_text",
+    "sanitize_pattern",
 ]

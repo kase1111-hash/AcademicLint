@@ -12,6 +12,12 @@ from academiclint.core.result import (
     ParagraphResult,
     Summary,
 )
+from academiclint.utils.validation import (
+    ValidationError,
+    validate_file_path,
+    validate_paths,
+    validate_text,
+)
 
 
 class Linter:
@@ -27,7 +33,14 @@ class Linter:
 
         Args:
             config: Linter configuration. Uses defaults if not provided.
+
+        Raises:
+            ConfigurationError: If the config is invalid
         """
+        if config is not None and not isinstance(config, Config):
+            raise ValidationError(
+                f"config must be a Config instance, got {type(config).__name__}"
+            )
         self.config = config or Config()
         self._nlp = None  # Lazy-loaded NLP pipeline
         self._detectors = None  # Lazy-loaded detector modules
@@ -54,7 +67,13 @@ class Linter:
 
         Returns:
             AnalysisResult with all findings
+
+        Raises:
+            ValidationError: If the text is invalid (None, empty, or too long)
         """
+        # Validate and sanitize input
+        text = validate_text(text)
+
         start_time = time.perf_counter()
         check_id = f"check_{uuid.uuid4().hex[:12]}"
         created_at = datetime.now(timezone.utc).isoformat()
@@ -126,7 +145,7 @@ class Linter:
             overall_suggestions=overall_suggestions,
         )
 
-    def check_file(self, path: Path) -> AnalysisResult:
+    def check_file(self, path: Path | str) -> AnalysisResult:
         """Analyze a file.
 
         Args:
@@ -134,13 +153,20 @@ class Linter:
 
         Returns:
             AnalysisResult with all findings
+
+        Raises:
+            ValidationError: If the path is invalid or file format unsupported
+            FileNotFoundError: If the file doesn't exist
         """
+        # Validate file path
+        validated_path = validate_file_path(path, must_exist=True, check_extension=True)
+
         from academiclint.core.parser import parse_file
 
-        text = parse_file(path)
+        text = parse_file(validated_path)
         return self.check(text)
 
-    def check_files(self, paths: list[Path]) -> dict[Path, AnalysisResult]:
+    def check_files(self, paths: list[Path | str]) -> dict[Path, AnalysisResult]:
         """Analyze multiple files.
 
         Args:
@@ -148,9 +174,16 @@ class Linter:
 
         Returns:
             Dict mapping paths to results
+
+        Raises:
+            ValidationError: If any path is invalid
+            FileNotFoundError: If any file doesn't exist
         """
+        # Validate all paths first
+        validated_paths = validate_paths(paths, must_exist=True, check_extension=True)
+
         results = {}
-        for path in paths:
+        for path in validated_paths:
             results[path] = self.check_file(path)
         return results
 
@@ -165,6 +198,9 @@ class Linter:
 
         Yields:
             ParagraphResult for each paragraph
+
+        Raises:
+            ValidationError: If the text is invalid
         """
         result = self.check(text)
         yield from result.paragraphs
