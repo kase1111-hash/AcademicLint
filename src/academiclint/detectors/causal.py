@@ -4,9 +4,9 @@ import re
 
 from academiclint.core.config import Config
 from academiclint.core.pipeline import ProcessedDocument
-from academiclint.core.result import Flag, FlagType, Severity, Span
+from academiclint.core.result import Flag, FlagType, Severity
 from academiclint.detectors.base import Detector
-from academiclint.utils.patterns import CAUSAL_PATTERNS, CITATION_PATTERNS
+from academiclint.utils.patterns import CAUSAL_PATTERNS
 
 
 class CausalDetector(Detector):
@@ -25,51 +25,27 @@ class CausalDetector(Detector):
                 start = match.start()
                 end = match.end()
 
-                # Check if there's a citation nearby
-                if self._has_nearby_citation(doc.text, end):
+                # Check if there's a citation nearby (uses base class method)
+                if self.has_nearby_citation(doc.text, end):
                     continue
 
-                # Get the matched term
                 term = doc.text[start:end]
 
-                # Determine line and column
-                line = doc.text[:start].count("\n") + 1
-                line_start = doc.text.rfind("\n", 0, start) + 1
-                column = start - line_start + 1
-
-                # Get context (the sentence containing the causal claim)
-                context_start = max(0, doc.text.rfind(".", 0, start) + 1)
-                context_end = doc.text.find(".", end)
-                if context_end == -1:
-                    context_end = min(len(doc.text), end + 50)
-                else:
-                    context_end += 1
-                context = doc.text[context_start:context_end].strip()
-
-                flag = Flag(
-                    type=FlagType.UNSUPPORTED_CAUSAL,
+                # Use base class create_flag helper for DRY
+                flag = self.create_flag(
+                    text=doc.text,
+                    flag_type=FlagType.UNSUPPORTED_CAUSAL,
                     term=term,
-                    span=Span(start=start, end=end),
-                    line=line,
-                    column=column,
+                    start=start,
+                    end=end,
                     severity=Severity.MEDIUM,
                     message="Causal claim without cited evidence or mechanism",
                     suggestion="Specify the mechanism, cite evidence, or use 'correlates with'",
                     example_revision=self._get_example(term),
-                    context=context,
                 )
                 flags.append(flag)
 
         return flags
-
-    def _has_nearby_citation(self, text: str, position: int, window: int = 100) -> bool:
-        """Check if there's a citation near the given position."""
-        search_region = text[position : position + window]
-
-        for pattern in CITATION_PATTERNS:
-            if re.search(pattern, search_region):
-                return True
-        return False
 
     def _get_example(self, term: str) -> str:
         """Get example revision for the causal term."""
