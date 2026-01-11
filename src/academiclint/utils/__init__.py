@@ -1,5 +1,14 @@
 """Utility modules for AcademicLint."""
 
+from academiclint.utils.error_reporting import (
+    JSONFormatter,
+    StructuredLogger,
+    capture_exception,
+    capture_message,
+    init_sentry,
+    set_user,
+    setup_json_logging,
+)
 from academiclint.utils.logging import (
     disable_logging,
     enable_logging,
@@ -51,4 +60,12 @@ __all__ = [
     "set_level",
     "disable_logging",
     "enable_logging",
+    # Error reporting
+    "init_sentry",
+    "capture_exception",
+    "capture_message",
+    "set_user",
+    "StructuredLogger",
+    "JSONFormatter",
+    "setup_json_logging",
 ]
