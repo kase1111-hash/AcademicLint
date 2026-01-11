@@ -1,0 +1,27 @@
+# AcademicLint Development Dependencies
+# Install with: pip install -r requirements-dev.txt
+
+# Include core dependencies
+-r requirements.txt
+
+# Testing
+pytest>=7.0.0
+pytest-cov>=4.0.0
+pytest-asyncio>=0.21.0
+
+# Type Checking
+mypy>=1.5.0
+
+# Linting & Formatting
+ruff>=0.1.0
+
+# Git Hooks
+pre-commit>=3.0.0
+
+# Optional: API dependencies for testing
+fastapi>=0.100.0
+uvicorn[standard]>=0.23.0
+
+# Optional: Transformer models for advanced detection
+# sentence-transformers>=2.2.0
+# torch>=2.0.0
