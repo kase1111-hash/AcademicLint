@@ -1,5 +1,12 @@
 """Utility modules for AcademicLint."""
 
+from academiclint.utils.logging import (
+    disable_logging,
+    enable_logging,
+    get_logger,
+    set_level,
+    setup_logging,
+)
 from academiclint.utils.patterns import (
     CAUSAL_PATTERNS,
     CITATION_PATTERNS,
@@ -13,10 +20,10 @@ from academiclint.utils.patterns import (
 from academiclint.utils.text import extract_context, get_line_column
 from academiclint.utils.validation import (
     ValidationError,
+    sanitize_pattern,
     validate_file_path,
     validate_paths,
     validate_text,
-    sanitize_pattern,
 )
 
 __all__ = [
@@ -38,4 +45,10 @@ __all__ = [
     "validate_paths",
     "validate_text",
     "sanitize_pattern",
+    # Logging
+    "setup_logging",
+    "get_logger",
+    "set_level",
+    "disable_logging",
+    "enable_logging",
 ]

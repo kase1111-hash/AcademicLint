@@ -1,10 +1,13 @@
 """NLP processing pipeline for AcademicLint."""
 
+import logging
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
 from academiclint.core.exceptions import ModelNotFoundError, ProcessingError
 from academiclint.core.result import Span
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -91,13 +94,17 @@ class NLPPipeline:
             ProcessingError: If spaCy fails to load for other reasons
         """
         if self._nlp is None:
+            logger.info("Loading spaCy model: %s", self.model_name)
             try:
                 import spacy
 
                 self._nlp = spacy.load(self.model_name)
+                logger.debug("spaCy model loaded successfully")
             except OSError:
+                logger.error("spaCy model not found: %s", self.model_name)
                 raise ModelNotFoundError(self.model_name)
             except Exception as e:
+                logger.error("Failed to load spaCy model: %s", e)
                 raise ProcessingError(
                     f"Failed to load spaCy model '{self.model_name}'",
                     original_error=e,

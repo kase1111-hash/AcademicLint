@@ -95,13 +95,20 @@ class Linter:
         check_id = f"check_{uuid.uuid4().hex[:12]}"
         created_at = datetime.now(timezone.utc).isoformat()
 
+        logger.info("Starting analysis [id=%s, length=%d chars]", check_id, len(text))
+        logger.debug("Configuration: level=%s, min_density=%.2f", self.config.level, self.config.min_density)
+
         self._ensure_pipeline()
         self._ensure_detectors()
 
         # Process document through NLP pipeline
+        logger.debug("Processing document through NLP pipeline")
         doc = self._nlp.process(text)
+        logger.debug("NLP processing complete: %d tokens, %d sentences, %d paragraphs",
+                    len(doc.tokens), len(doc.sentences), len(doc.paragraphs))
 
         # Run all detectors with error handling
+        logger.debug("Running %d detectors", len(self._detectors))
         all_flags = []
         for detector in self._detectors:
             try:
@@ -189,7 +196,7 @@ class Linter:
             suggestion_count=len(overall_suggestions),
         )
 
-        return AnalysisResult(
+        result = AnalysisResult(
             id=check_id,
             created_at=created_at,
             input_length=len(text),
@@ -198,6 +205,13 @@ class Linter:
             paragraphs=paragraphs,
             overall_suggestions=overall_suggestions,
         )
+
+        logger.info(
+            "Analysis complete [id=%s, time=%dms, flags=%d, density=%.2f (%s)]",
+            check_id, processing_time_ms, len(all_flags), overall_density, density_grade
+        )
+
+        return result
 
     def check_file(self, path: Path | str) -> AnalysisResult:
         """Analyze a file.
@@ -213,14 +227,19 @@ class Linter:
             FileNotFoundError: If the file doesn't exist
             ParsingError: If the file cannot be parsed
         """
+        logger.info("Analyzing file: %s", path)
+
         # Validate file path
         validated_path = validate_file_path(path, must_exist=True, check_extension=True)
+        logger.debug("File validated: %s", validated_path)
 
         from academiclint.core.parser import parse_file
 
         try:
             text = parse_file(validated_path)
+            logger.debug("File parsed: %d characters", len(text))
         except Exception as e:
+            logger.error("Failed to parse file %s: %s", path, e)
             if isinstance(e, (ValidationError, FileNotFoundError, ParsingError)):
                 raise
             raise ParsingError(
