@@ -3,6 +3,7 @@
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
+from academiclint.core.exceptions import ModelNotFoundError, ProcessingError
 from academiclint.core.result import Span
 
 
@@ -83,16 +84,23 @@ class NLPPipeline:
         self._nlp = None
 
     def _ensure_loaded(self) -> None:
-        """Ensure the spaCy model is loaded."""
+        """Ensure the spaCy model is loaded.
+
+        Raises:
+            ModelNotFoundError: If the spaCy model is not installed
+            ProcessingError: If spaCy fails to load for other reasons
+        """
         if self._nlp is None:
             try:
                 import spacy
 
                 self._nlp = spacy.load(self.model_name)
             except OSError:
-                raise RuntimeError(
-                    f"Model '{self.model_name}' not found. "
-                    f"Run 'academiclint setup' to download required models."
+                raise ModelNotFoundError(self.model_name)
+            except Exception as e:
+                raise ProcessingError(
+                    f"Failed to load spaCy model '{self.model_name}'",
+                    original_error=e,
                 )
 
     def process(self, text: str) -> ProcessedDocument:
@@ -103,27 +111,26 @@ class NLPPipeline:
 
         Returns:
             ProcessedDocument with tokens, sentences, entities, etc.
+
+        Raises:
+            ModelNotFoundError: If the spaCy model is not installed
+            ProcessingError: If NLP processing fails
         """
         self._ensure_loaded()
 
-        doc = self._nlp(text)
-
-        # Extract tokens
-        tokens = [
-            Token(
-                text=token.text,
-                lemma=token.lemma_,
-                pos=token.pos_,
-                is_stop=token.is_stop,
-                idx=token.idx,
+        try:
+            doc = self._nlp(text)
+        except MemoryError:
+            raise ProcessingError(
+                "Out of memory while processing document. "
+                "Try processing a smaller document or increasing available memory."
             )
-            for token in doc
-        ]
+        except Exception as e:
+            raise ProcessingError("NLP processing failed", original_error=e)
 
-        # Extract sentences
-        sentences = []
-        for sent in doc.sents:
-            sent_tokens = [
+        try:
+            # Extract tokens
+            tokens = [
                 Token(
                     text=token.text,
                     lemma=token.lemma_,
@@ -131,116 +138,149 @@ class NLPPipeline:
                     is_stop=token.is_stop,
                     idx=token.idx,
                 )
-                for token in sent
+                for token in doc
             ]
-            sentences.append(
-                Sentence(
-                    text=sent.text,
-                    span=Span(start=sent.start_char, end=sent.end_char),
-                    tokens=sent_tokens,
+
+            # Extract sentences
+            sentences = []
+            for sent in doc.sents:
+                sent_tokens = [
+                    Token(
+                        text=token.text,
+                        lemma=token.lemma_,
+                        pos=token.pos_,
+                        is_stop=token.is_stop,
+                        idx=token.idx,
+                    )
+                    for token in sent
+                ]
+                sentences.append(
+                    Sentence(
+                        text=sent.text,
+                        span=Span(start=sent.start_char, end=sent.end_char),
+                        tokens=sent_tokens,
+                    )
                 )
+
+            # Extract paragraphs (split by double newlines)
+            paragraphs = self._extract_paragraphs(text, doc)
+
+            # Extract entities
+            entities = [
+                Entity(
+                    text=ent.text,
+                    label=ent.label_,
+                    span=Span(start=ent.start_char, end=ent.end_char),
+                )
+                for ent in doc.ents
+            ]
+
+            # Extract noun chunks
+            noun_chunks = [
+                NounChunk(
+                    text=chunk.text,
+                    root=chunk.root.text,
+                    span=Span(start=chunk.start_char, end=chunk.end_char),
+                )
+                for chunk in doc.noun_chunks
+            ]
+
+            # Calculate concept count (unique lemmas of content words)
+            content_lemmas = {
+                token.lemma_
+                for token in doc
+                if not token.is_stop and token.pos_ in ("NOUN", "VERB", "ADJ", "ADV")
+            }
+            concept_count = len(content_lemmas)
+
+            # Calculate filler ratio
+            from academiclint.utils.patterns import FILLER_PHRASES
+
+            filler_count = sum(1 for phrase in FILLER_PHRASES if phrase.lower() in text.lower())
+            word_count = len([t for t in doc if not t.is_punct and not t.is_space])
+            filler_ratio = filler_count / max(word_count, 1)
+
+            return ProcessedDocument(
+                text=text,
+                tokens=tokens,
+                sentences=sentences,
+                paragraphs=paragraphs,
+                entities=entities,
+                noun_chunks=noun_chunks,
+                concept_count=concept_count,
+                filler_ratio=filler_ratio,
+                _spacy_doc=doc,
             )
-
-        # Extract paragraphs (split by double newlines)
-        paragraphs = self._extract_paragraphs(text, doc)
-
-        # Extract entities
-        entities = [
-            Entity(
-                text=ent.text,
-                label=ent.label_,
-                span=Span(start=ent.start_char, end=ent.end_char),
-            )
-            for ent in doc.ents
-        ]
-
-        # Extract noun chunks
-        noun_chunks = [
-            NounChunk(
-                text=chunk.text,
-                root=chunk.root.text,
-                span=Span(start=chunk.start_char, end=chunk.end_char),
-            )
-            for chunk in doc.noun_chunks
-        ]
-
-        # Calculate concept count (unique lemmas of content words)
-        content_lemmas = {
-            token.lemma_
-            for token in doc
-            if not token.is_stop and token.pos_ in ("NOUN", "VERB", "ADJ", "ADV")
-        }
-        concept_count = len(content_lemmas)
-
-        # Calculate filler ratio
-        from academiclint.utils.patterns import FILLER_PHRASES
-
-        filler_count = sum(1 for phrase in FILLER_PHRASES if phrase.lower() in text.lower())
-        word_count = len([t for t in doc if not t.is_punct and not t.is_space])
-        filler_ratio = filler_count / max(word_count, 1)
-
-        return ProcessedDocument(
-            text=text,
-            tokens=tokens,
-            sentences=sentences,
-            paragraphs=paragraphs,
-            entities=entities,
-            noun_chunks=noun_chunks,
-            concept_count=concept_count,
-            filler_ratio=filler_ratio,
-            _spacy_doc=doc,
-        )
+        except (ModelNotFoundError, ProcessingError):
+            # Re-raise our own exceptions
+            raise
+        except Exception as e:
+            raise ProcessingError("Failed to extract document features", original_error=e)
 
     def _extract_paragraphs(self, text: str, doc: Any) -> list[Paragraph]:
-        """Extract paragraphs from text."""
-        paragraphs = []
-        para_texts = text.split("\n\n")
+        """Extract paragraphs from text.
 
-        current_pos = 0
-        for para_text in para_texts:
-            para_text = para_text.strip()
-            if not para_text:
-                continue
+        Args:
+            text: Original text
+            doc: spaCy Doc object
 
-            # Find the start position in original text
-            start = text.find(para_text, current_pos)
-            if start == -1:
-                start = current_pos
-            end = start + len(para_text)
-            current_pos = end
+        Returns:
+            List of Paragraph objects
 
-            # Count words and sentences in paragraph
-            para_doc = self._nlp(para_text)
-            word_count = len([t for t in para_doc if not t.is_punct and not t.is_space])
-            sentence_count = len(list(para_doc.sents))
+        Raises:
+            ProcessingError: If paragraph extraction fails
+        """
+        try:
+            paragraphs = []
+            para_texts = text.split("\n\n")
 
-            # Extract sentences for this paragraph
-            para_sentences = [
-                Sentence(
-                    text=sent.text,
-                    span=Span(start=start + sent.start_char, end=start + sent.end_char),
-                    tokens=[
-                        Token(
-                            text=token.text,
-                            lemma=token.lemma_,
-                            pos=token.pos_,
-                            is_stop=token.is_stop,
-                            idx=start + token.idx,
-                        )
-                        for token in sent
-                    ],
+            current_pos = 0
+            for para_text in para_texts:
+                para_text = para_text.strip()
+                if not para_text:
+                    continue
+
+                # Find the start position in original text
+                start = text.find(para_text, current_pos)
+                if start == -1:
+                    start = current_pos
+                end = start + len(para_text)
+                current_pos = end
+
+                # Count words and sentences in paragraph
+                para_doc = self._nlp(para_text)
+                word_count = len([t for t in para_doc if not t.is_punct and not t.is_space])
+                sentence_count = len(list(para_doc.sents))
+
+                # Extract sentences for this paragraph
+                para_sentences = [
+                    Sentence(
+                        text=sent.text,
+                        span=Span(start=start + sent.start_char, end=start + sent.end_char),
+                        tokens=[
+                            Token(
+                                text=token.text,
+                                lemma=token.lemma_,
+                                pos=token.pos_,
+                                is_stop=token.is_stop,
+                                idx=start + token.idx,
+                            )
+                            for token in sent
+                        ],
+                    )
+                    for sent in para_doc.sents
+                ]
+
+                paragraphs.append(
+                    Paragraph(
+                        text=para_text,
+                        span=Span(start=start, end=end),
+                        sentences=para_sentences,
+                        word_count=word_count,
+                        sentence_count=sentence_count,
+                    )
                 )
-                for sent in para_doc.sents
-            ]
 
-            paragraphs.append(
-                Paragraph(
-                    text=para_text,
-                    span=Span(start=start, end=end),
-                    sentences=para_sentences,
-                    word_count=word_count,
-                    sentence_count=sentence_count,
-                )
-            )
-
-        return paragraphs
+            return paragraphs
+        except Exception as e:
+            raise ProcessingError("Failed to extract paragraphs", original_error=e)

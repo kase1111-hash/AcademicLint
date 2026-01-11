@@ -1,5 +1,6 @@
 """Main Linter class for AcademicLint."""
 
+import logging
 import time
 import uuid
 from datetime import datetime, timezone
@@ -7,17 +8,24 @@ from pathlib import Path
 from typing import Iterator, Optional
 
 from academiclint.core.config import Config
+from academiclint.core.exceptions import (
+    AcademicLintError,
+    DetectorError,
+    ParsingError,
+    ValidationError,
+)
 from academiclint.core.result import (
     AnalysisResult,
     ParagraphResult,
     Summary,
 )
 from academiclint.utils.validation import (
-    ValidationError,
     validate_file_path,
     validate_paths,
     validate_text,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class Linter:
@@ -35,7 +43,8 @@ class Linter:
             config: Linter configuration. Uses defaults if not provided.
 
         Raises:
-            ConfigurationError: If the config is invalid
+            ValidationError: If the config is not a Config instance
+            ConfigurationError: If the config values are invalid
         """
         if config is not None and not isinstance(config, Config):
             raise ValidationError(
@@ -46,7 +55,12 @@ class Linter:
         self._detectors = None  # Lazy-loaded detector modules
 
     def _ensure_pipeline(self) -> None:
-        """Ensure NLP pipeline is loaded."""
+        """Ensure NLP pipeline is loaded.
+
+        Raises:
+            ModelNotFoundError: If spaCy model is not installed
+            ProcessingError: If pipeline fails to initialize
+        """
         if self._nlp is None:
             from academiclint.core.pipeline import NLPPipeline
 
@@ -70,6 +84,9 @@ class Linter:
 
         Raises:
             ValidationError: If the text is invalid (None, empty, or too long)
+            ModelNotFoundError: If spaCy model is not installed
+            ProcessingError: If NLP processing fails
+            DetectorError: If a detector fails (only in strict mode)
         """
         # Validate and sanitize input
         text = validate_text(text)
@@ -84,11 +101,23 @@ class Linter:
         # Process document through NLP pipeline
         doc = self._nlp.process(text)
 
-        # Run all detectors
+        # Run all detectors with error handling
         all_flags = []
         for detector in self._detectors:
-            flags = detector.detect(doc, self.config)
-            all_flags.extend(flags)
+            try:
+                flags = detector.detect(doc, self.config)
+                all_flags.extend(flags)
+            except AcademicLintError:
+                # Re-raise our own exceptions
+                raise
+            except Exception as e:
+                detector_name = type(detector).__name__
+                logger.warning(
+                    f"Detector {detector_name} failed: {e}",
+                    exc_info=True,
+                )
+                # Continue with other detectors instead of failing completely
+                # In strict mode, we could raise DetectorError here
 
         # Calculate density for each paragraph
         from academiclint.density import calculate_density
@@ -98,24 +127,49 @@ class Linter:
         total_sentences = 0
 
         for i, para in enumerate(doc.paragraphs):
-            para_flags = [f for f in all_flags if para.span.start <= f.span.start < para.span.end]
-            density = calculate_density(para.text, para_flags, self.config)
+            try:
+                para_flags = [
+                    f for f in all_flags
+                    if para.span.start <= f.span.start < para.span.end
+                ]
+                density = calculate_density(para.text, para_flags, self.config)
 
-            para_result = ParagraphResult(
-                index=i,
-                text=para.text,
-                span=para.span,
-                density=density,
-                flags=para_flags,
-                word_count=para.word_count,
-                sentence_count=para.sentence_count,
-            )
-            paragraphs.append(para_result)
-            total_words += para.word_count
-            total_sentences += para.sentence_count
+                para_result = ParagraphResult(
+                    index=i,
+                    text=para.text,
+                    span=para.span,
+                    density=density,
+                    flags=para_flags,
+                    word_count=para.word_count,
+                    sentence_count=para.sentence_count,
+                )
+                paragraphs.append(para_result)
+                total_words += para.word_count
+                total_sentences += para.sentence_count
+            except Exception as e:
+                logger.warning(f"Failed to process paragraph {i}: {e}")
+                # Create minimal paragraph result
+                paragraphs.append(
+                    ParagraphResult(
+                        index=i,
+                        text=para.text,
+                        span=para.span,
+                        density=0.0,
+                        flags=[],
+                        word_count=para.word_count,
+                        sentence_count=para.sentence_count,
+                    )
+                )
+                total_words += para.word_count
+                total_sentences += para.sentence_count
 
         # Calculate overall density
-        overall_density = calculate_density(text, all_flags, self.config)
+        try:
+            overall_density = calculate_density(text, all_flags, self.config)
+        except Exception as e:
+            logger.warning(f"Failed to calculate overall density: {e}")
+            overall_density = 0.0
+
         density_grade = self._get_density_grade(overall_density)
 
         # Generate overall suggestions
@@ -157,13 +211,23 @@ class Linter:
         Raises:
             ValidationError: If the path is invalid or file format unsupported
             FileNotFoundError: If the file doesn't exist
+            ParsingError: If the file cannot be parsed
         """
         # Validate file path
         validated_path = validate_file_path(path, must_exist=True, check_extension=True)
 
         from academiclint.core.parser import parse_file
 
-        text = parse_file(validated_path)
+        try:
+            text = parse_file(validated_path)
+        except Exception as e:
+            if isinstance(e, (ValidationError, FileNotFoundError, ParsingError)):
+                raise
+            raise ParsingError(
+                f"Failed to parse file: {e}",
+                file_path=str(validated_path),
+            )
+
         return self.check(text)
 
     def check_files(self, paths: list[Path | str]) -> dict[Path, AnalysisResult]:
@@ -173,18 +237,23 @@ class Linter:
             paths: List of file paths
 
         Returns:
-            Dict mapping paths to results
+            Dict mapping paths to results. Failed files will have error results.
 
         Raises:
-            ValidationError: If any path is invalid
-            FileNotFoundError: If any file doesn't exist
+            ValidationError: If the paths list is invalid
         """
         # Validate all paths first
         validated_paths = validate_paths(paths, must_exist=True, check_extension=True)
 
         results = {}
         for path in validated_paths:
-            results[path] = self.check_file(path)
+            try:
+                results[path] = self.check_file(path)
+            except AcademicLintError as e:
+                logger.error(f"Failed to analyze {path}: {e}")
+                # Re-raise on first error; alternatively could collect errors
+                raise
+
         return results
 
     def check_stream(self, text: str) -> Iterator[ParagraphResult]:

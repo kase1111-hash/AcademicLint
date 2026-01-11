@@ -6,12 +6,7 @@ from typing import Optional
 
 import yaml
 
-
-class ConfigurationError(Exception):
-    """Raised when configuration values are invalid."""
-
-    pass
-
+from academiclint.core.exceptions import ConfigurationError
 
 # Valid values for configuration options
 VALID_LEVELS = frozenset({"relaxed", "standard", "strict", "academic"})
