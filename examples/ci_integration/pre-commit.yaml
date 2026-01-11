@@ -1,0 +1,40 @@
+# Pre-commit configuration for AcademicLint
+# Add this to your .pre-commit-config.yaml
+
+# First, ensure you have pre-commit installed:
+#   pip install pre-commit
+#   pre-commit install
+
+# Then add this configuration:
+repos:
+  - repo: https://github.com/kase1111-hash/academiclint
+    rev: v0.1.0
+    hooks:
+      - id: academiclint
+        name: AcademicLint
+        description: Check semantic clarity of markdown files
+        entry: academiclint check
+        language: python
+        types: [markdown]
+        args:
+          - '--level'
+          - 'standard'
+          - '--fail-under'
+          - '0.40'
+          - '--format'
+          - 'terminal'
+
+# Alternative: Run on specific files only
+  - repo: https://github.com/kase1111-hash/academiclint
+    rev: v0.1.0
+    hooks:
+      - id: academiclint-docs
+        name: AcademicLint (docs only)
+        entry: academiclint check
+        language: python
+        files: ^docs/.*\.md$
+        args:
+          - '--level'
+          - 'strict'
+          - '--fail-under'
+          - '0.50'

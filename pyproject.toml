@@ -1,0 +1,111 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "academiclint"
+version = "0.1.0"
+description = "Semantic clarity analyzer for academic writing"
+readme = "README.md"
+license = {text = "Polyform-Small-Business-1.0.0"}
+requires-python = ">=3.11"
+authors = [
+    {name = "AcademicLint Team", email = "kase1111@gmail.com"},
+]
+keywords = [
+    "academic",
+    "writing",
+    "linting",
+    "nlp",
+    "clarity",
+    "semantic",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Education",
+    "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Text Processing :: Linguistic",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+dependencies = [
+    "spacy>=3.7.0,<4.0.0",
+    "click>=8.0.0",
+    "pyyaml>=6.0",
+    "rich>=13.0.0",
+    "pydantic>=2.0.0",
+]
+
+[project.optional-dependencies]
+api = [
+    "fastapi>=0.100.0",
+    "uvicorn[standard]>=0.23.0",
+]
+transformers = [
+    "sentence-transformers>=2.2.0",
+    "torch>=2.0.0",
+]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "pytest-asyncio>=0.21.0",
+    "mypy>=1.5.0",
+    "ruff>=0.1.0",
+    "pre-commit>=3.0.0",
+]
+all = [
+    "academiclint[api,transformers,dev]",
+]
+
+[project.scripts]
+academiclint = "academiclint.cli.main:cli"
+
+[project.urls]
+Homepage = "https://github.com/kase1111-hash/academiclint"
+Documentation = "https://docs.academiclint.dev"
+Repository = "https://github.com/kase1111-hash/academiclint.git"
+Issues = "https://github.com/kase1111-hash/academiclint/issues"
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/src",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/academiclint"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = "-v --tb=short"
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+]
+ignore = [
+    "E501",  # line too long (handled by formatter)
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["academiclint"]
