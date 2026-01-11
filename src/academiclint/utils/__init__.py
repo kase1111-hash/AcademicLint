@@ -1,5 +1,16 @@
 """Utility modules for AcademicLint."""
 
+from academiclint.utils.env import (
+    EnvConfig,
+    get_env,
+    get_env_bool,
+    get_env_float,
+    get_env_int,
+    get_env_list,
+    get_secret,
+    load_env,
+    mask_secret,
+)
 from academiclint.utils.error_reporting import (
     JSONFormatter,
     StructuredLogger,
@@ -54,6 +65,16 @@ __all__ = [
     "validate_paths",
     "validate_text",
     "sanitize_pattern",
+    # Environment & Configuration
+    "load_env",
+    "get_env",
+    "get_env_bool",
+    "get_env_int",
+    "get_env_float",
+    "get_env_list",
+    "get_secret",
+    "mask_secret",
+    "EnvConfig",
     # Logging
     "setup_logging",
     "get_logger",

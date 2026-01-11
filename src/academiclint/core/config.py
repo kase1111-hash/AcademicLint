@@ -184,3 +184,66 @@ class Config:
             "academic": {"min_density": 0.75, "sensitivity": "comprehensive"},
         }
         return thresholds.get(self.level, thresholds["standard"])
+
+    @classmethod
+    def from_env(cls, load_dotenv: bool = True) -> "Config":
+        """Load configuration from environment variables.
+
+        Environment variables are prefixed with ACADEMICLINT_ and include:
+        - ACADEMICLINT_LEVEL: Analysis level (relaxed, standard, strict, academic)
+        - ACADEMICLINT_MIN_DENSITY: Minimum density threshold (0.0-1.0)
+        - ACADEMICLINT_FAIL_UNDER: Fail threshold (0.0-1.0)
+        - ACADEMICLINT_DOMAIN: Domain name for specialized analysis
+        - ACADEMICLINT_OUTPUT_FORMAT: Output format
+        - ACADEMICLINT_COLOR: Enable colored output (true/false)
+
+        Args:
+            load_dotenv: If True, attempt to load .env file first
+
+        Returns:
+            Config instance with settings from environment
+
+        Raises:
+            ConfigurationError: If environment values are invalid
+
+        Example:
+            >>> # Set environment variables
+            >>> os.environ["ACADEMICLINT_LEVEL"] = "strict"
+            >>> os.environ["ACADEMICLINT_MIN_DENSITY"] = "0.65"
+            >>> config = Config.from_env()
+        """
+        from academiclint.utils.env import (
+            get_env,
+            get_env_bool,
+            get_env_float,
+            load_env,
+        )
+
+        if load_dotenv:
+            load_env()
+
+        # Build config from environment
+        level = get_env("LEVEL", default="standard")
+        min_density = get_env_float("MIN_DENSITY", default=0.50)
+        domain = get_env("DOMAIN")
+
+        # Fail under is optional
+        fail_under_str = get_env("FAIL_UNDER")
+        fail_under = float(fail_under_str) if fail_under_str else None
+
+        # Output config from environment
+        output_format = get_env("OUTPUT_FORMAT", default="terminal")
+        color = get_env_bool("COLOR", default=True)
+
+        output_config = OutputConfig(
+            format=output_format,
+            color=color,
+        )
+
+        return cls(
+            level=level,
+            min_density=min_density,
+            domain=domain,
+            fail_under=fail_under,
+            output=output_config,
+        )
