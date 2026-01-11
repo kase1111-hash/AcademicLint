@@ -1,0 +1,18 @@
+# AcademicLint Core Dependencies
+# Install with: pip install -r requirements.txt
+# For development, also install: pip install -r requirements-dev.txt
+
+# NLP Processing
+spacy>=3.7.0,<4.0.0
+
+# CLI Framework
+click>=8.0.0
+
+# Configuration
+pyyaml>=6.0
+
+# Terminal Formatting
+rich>=13.0.0
+
+# Data Validation
+pydantic>=2.0.0

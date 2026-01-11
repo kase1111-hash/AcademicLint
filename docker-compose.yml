@@ -1,0 +1,100 @@
+# AcademicLint Docker Compose Configuration
+# Usage:
+#   Development:  docker-compose up dev
+#   Production:   docker-compose up api
+#   Tests:        docker-compose run test
+
+version: '3.8'
+
+services:
+  # ==========================================================================
+  # Production API Server
+  # ==========================================================================
+  api:
+    build:
+      context: .
+      target: production
+    image: academiclint:latest
+    container_name: academiclint-api
+    ports:
+      - "8080:8080"
+    environment:
+      - ACADEMICLINT_LEVEL=standard
+      - ACADEMICLINT_WORKERS=2
+    volumes:
+      - model-cache:/home/academiclint/.cache/academiclint
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/v1/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # ==========================================================================
+  # Development Environment
+  # ==========================================================================
+  dev:
+    build:
+      context: .
+      target: development
+    image: academiclint:dev
+    container_name: academiclint-dev
+    ports:
+      - "8080:8080"
+    environment:
+      - ACADEMICLINT_LEVEL=standard
+      - PYTHONDONTWRITEBYTECODE=1
+    volumes:
+      # Mount source for live reloading
+      - ./src:/app/src:ro
+      - ./tests:/app/tests:ro
+      - model-cache:/home/academiclint/.cache/academiclint
+    command: >
+      python -m academiclint.cli.main serve
+      --host 0.0.0.0
+      --port 8080
+      --reload
+    stdin_open: true
+    tty: true
+
+  # ==========================================================================
+  # Test Runner
+  # ==========================================================================
+  test:
+    build:
+      context: .
+      target: development
+    image: academiclint:dev
+    container_name: academiclint-test
+    environment:
+      - PYTHONDONTWRITEBYTECODE=1
+    volumes:
+      - ./src:/app/src:ro
+      - ./tests:/app/tests:ro
+      - model-cache:/home/academiclint/.cache/academiclint
+    command: pytest --cov=academiclint --cov-report=term-missing -v
+
+  # ==========================================================================
+  # Linting and Type Checking
+  # ==========================================================================
+  lint:
+    build:
+      context: .
+      target: development
+    image: academiclint:dev
+    container_name: academiclint-lint
+    volumes:
+      - ./src:/app/src:ro
+      - ./tests:/app/tests:ro
+    command: >
+      sh -c "ruff check src/ tests/ &&
+             ruff format --check src/ tests/ &&
+             mypy src/"
+
+# =============================================================================
+# Volumes
+# =============================================================================
+volumes:
+  model-cache:
+    name: academiclint-models
