@@ -4,9 +4,9 @@ import re
 
 from academiclint.core.config import Config
 from academiclint.core.pipeline import ProcessedDocument
-from academiclint.core.result import Flag, FlagType, Severity, Span
+from academiclint.core.result import Flag, FlagType, Severity
 from academiclint.detectors.base import Detector
-from academiclint.utils.patterns import CITATION_PATTERNS, WEASEL_PATTERNS
+from academiclint.utils.patterns import WEASEL_PATTERNS
 
 
 class WeaselDetector(Detector):
@@ -30,48 +30,26 @@ class WeaselDetector(Detector):
                 start = match.start()
                 end = match.end()
 
-                # Check if followed by citation
-                if self._has_following_citation(doc.text, end):
+                # Check if followed by citation (uses base class method)
+                if self.has_nearby_citation(doc.text, end, window=20):
                     continue
 
                 term = doc.text[start:end]
 
-                line = doc.text[:start].count("\n") + 1
-                line_start = doc.text.rfind("\n", 0, start) + 1
-                column = start - line_start + 1
-
-                # Get context
-                context_start = max(0, doc.text.rfind(".", 0, start) + 1)
-                context_end = doc.text.find(".", end)
-                if context_end == -1:
-                    context_end = min(len(doc.text), end + 50)
-                else:
-                    context_end += 1
-                context = doc.text[context_start:context_end].strip()
-
-                flag = Flag(
-                    type=FlagType.WEASEL,
+                # Use base class create_flag helper for DRY
+                flag = self.create_flag(
+                    text=doc.text,
+                    flag_type=FlagType.WEASEL,
                     term=term,
-                    span=Span(start=start, end=end),
-                    line=line,
-                    column=column,
+                    start=start,
+                    end=end,
                     severity=Severity.MEDIUM,
                     message="Vague attribution that avoids accountability",
                     suggestion=self._get_suggestion(term),
-                    context=context,
                 )
                 flags.append(flag)
 
         return flags
-
-    def _has_following_citation(self, text: str, position: int, window: int = 20) -> bool:
-        """Check if there's a citation immediately following."""
-        search_region = text[position : position + window]
-
-        for pattern in CITATION_PATTERNS:
-            if re.match(r"\s*" + pattern, search_region):
-                return True
-        return False
 
     def _get_suggestion(self, term: str) -> str:
         """Get suggestion for the weasel phrase."""
