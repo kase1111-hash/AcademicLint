@@ -29,7 +29,7 @@ Testing & Validation
  ✅ Perform security checks (input, encryption, tokens)
  Perform exploit testing (SQLi, XSS, overflow) — N/A: No SQL/DOM; see code-audit.md
  Check for backdoors & unauthorized access — Verified via code audit
- Run static analysis (lint, type check, vuln scan)
+ ✅ Run static analysis (lint, type check, vuln scan)
  Run dynamic analysis (fuzzing, runtime behavior) — Covered by performance tests
 Build, Deployment & Monitoring
  Create automated build scripts (Makefile, .bat, shell)
