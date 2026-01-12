@@ -9,9 +9,29 @@ try:
 
     router = APIRouter()
 
-    @router.post("/check", response_model=CheckResponse)
+    @router.post(
+        "/check",
+        response_model=CheckResponse,
+        tags=["Analysis"],
+        summary="Analyze text for clarity issues",
+        response_description="Analysis results with density score and detected issues",
+    )
     async def check_text(request: CheckRequest):
-        """Analyze text for semantic clarity issues."""
+        """Analyze text for semantic clarity issues.
+
+        Performs a comprehensive analysis of the provided text, detecting:
+        - Vague or imprecise language
+        - Excessive hedging
+        - Circular definitions
+        - Claims needing citations
+        - Filler phrases and padding
+        - Unsupported causal claims
+        - Domain-specific jargon
+        - Weasel words
+
+        Returns a detailed report including per-paragraph density scores,
+        individual flags for each detected issue, and improvement suggestions.
+        """
         try:
             # Build config from request
             config = Config()
@@ -34,18 +54,42 @@ try:
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
 
-    @router.get("/health", response_model=HealthResponse)
+    @router.get(
+        "/health",
+        response_model=HealthResponse,
+        tags=["Health"],
+        summary="Check service health",
+        response_description="Health status including version and model state",
+    )
     async def health_check():
-        """Health check endpoint."""
+        """Health check endpoint.
+
+        Returns the current health status of the API service,
+        including version information and whether NLP models are loaded.
+        Use this endpoint for monitoring and load balancer health checks.
+        """
         return HealthResponse(
             status="healthy",
             version=__version__,
             models_loaded=True,
         )
 
-    @router.get("/domains")
+    @router.get(
+        "/domains",
+        tags=["Configuration"],
+        summary="List available domains",
+        response_description="List of built-in domain configurations",
+    )
     async def list_domains():
-        """List available domains."""
+        """List available academic domains.
+
+        Returns a list of built-in domain configurations that can be used
+        to customize the analysis. Each domain includes specialized terminology
+        that won't be flagged as jargon when analyzing domain-specific text.
+
+        Available domains typically include: physics, biology, chemistry,
+        medicine, computer_science, and more.
+        """
         manager = DomainManager()
         return {"domains": manager.list_domains()}
 

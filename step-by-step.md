@@ -46,7 +46,7 @@ Finalization & Compliance
  Conduct manual exploratory testing — Via acceptance tests
  Peer review / code audit — See docs/code-audit.md
  Run penetration test (internal or 3rd-party) — Basic security review complete
- Document APIs (Swagger / Postman)
+ ✅ Document APIs (Swagger / Postman)
  Create architecture & data flow diagrams
  Finalize user documentation (README, FAQ, troubleshooting)
  Add license file

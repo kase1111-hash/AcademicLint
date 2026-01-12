@@ -1,0 +1,284 @@
+{
+  "info": {
+    "_postman_id": "academiclint-api-collection",
+    "name": "AcademicLint API",
+    "description": "Semantic clarity analyzer for academic writing.\n\nThis collection contains all available API endpoints for the AcademicLint service.\n\n## Getting Started\n\n1. Start the API server: `docker-compose up api` or `make dev-server`\n2. Set the `base_url` variable to your server address\n3. Run requests to analyze text\n\n## Authentication\n\nCurrently, the API does not require authentication for local development.\nFor production deployments, configure appropriate authentication middleware.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8080",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "description": "Health and status endpoints",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/health",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "health"]
+            },
+            "description": "Check if the API service is healthy and operational.\n\nReturns version info and model loading status."
+          },
+          "response": [
+            {
+              "name": "Healthy Response",
+              "originalRequest": {
+                "method": "GET",
+                "url": {
+                  "raw": "{{base_url}}/v1/health",
+                  "host": ["{{base_url}}"],
+                  "path": ["v1", "health"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"status\": \"healthy\",\n  \"version\": \"0.1.0\",\n  \"models_loaded\": true\n}"
+            }
+          ]
+        },
+        {
+          "name": "Root Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/health",
+              "host": ["{{base_url}}"],
+              "path": ["health"]
+            },
+            "description": "Root-level health check for load balancers.\n\nSimplified health check without the /v1 prefix."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Analysis",
+      "description": "Text analysis endpoints",
+      "item": [
+        {
+          "name": "Analyze Text (Simple)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"This is somewhat important for various reasons.\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/v1/check",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "check"]
+            },
+            "description": "Analyze text with default configuration.\n\nSends text for semantic clarity analysis using standard settings."
+          },
+          "response": [
+            {
+              "name": "Analysis Result",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"text\": \"This is somewhat important for various reasons.\"\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/v1/check",
+                  "host": ["{{base_url}}"],
+                  "path": ["v1", "check"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"id\": \"analysis-12345\",\n  \"created_at\": \"2024-01-15T10:30:00Z\",\n  \"input_length\": 47,\n  \"processing_time_ms\": 150,\n  \"summary\": {\n    \"density\": 0.45,\n    \"density_grade\": \"D\",\n    \"flag_count\": 2,\n    \"word_count\": 8,\n    \"sentence_count\": 1,\n    \"paragraph_count\": 1,\n    \"concept_count\": 3,\n    \"filler_ratio\": 0.25,\n    \"suggestion_count\": 2\n  },\n  \"paragraphs\": [\n    {\n      \"index\": 0,\n      \"text\": \"This is somewhat important for various reasons.\",\n      \"span\": {\"start\": 0, \"end\": 47},\n      \"density\": 0.45,\n      \"word_count\": 8,\n      \"sentence_count\": 1,\n      \"flags\": [\n        {\n          \"type\": \"hedge\",\n          \"term\": \"somewhat\",\n          \"span\": {\"start\": 8, \"end\": 16},\n          \"line\": 1,\n          \"column\": 9,\n          \"severity\": \"low\",\n          \"message\": \"Hedge word weakens the statement\",\n          \"suggestion\": \"Consider removing or being more specific\",\n          \"context\": \"This is somewhat important\"\n        },\n        {\n          \"type\": \"vague\",\n          \"term\": \"various\",\n          \"span\": {\"start\": 32, \"end\": 39},\n          \"line\": 1,\n          \"column\": 33,\n          \"severity\": \"medium\",\n          \"message\": \"Vague term lacks specificity\",\n          \"suggestion\": \"Specify the exact reasons\",\n          \"context\": \"for various reasons\"\n        }\n      ]\n    }\n  ],\n  \"overall_suggestions\": [\n    \"Consider specifying exact quantities instead of vague terms\",\n    \"Remove hedging language to strengthen claims\"\n  ]\n}"
+            }
+          ]
+        },
+        {
+          "name": "Analyze Text (With Config)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"The algorithm achieves significant performance improvements through various optimization techniques. Studies suggest this approach may lead to better outcomes.\",\n  \"config\": {\n    \"level\": \"strict\",\n    \"min_density\": 0.6,\n    \"domain\": \"computer_science\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/v1/check",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "check"]
+            },
+            "description": "Analyze text with custom configuration.\n\nDemonstrates using:\n- `level`: Analysis strictness (relaxed, standard, strict, academic)\n- `min_density`: Minimum acceptable density threshold\n- `domain`: Academic domain for specialized terminology"
+          },
+          "response": []
+        },
+        {
+          "name": "Analyze Text (Academic Level)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"It is generally believed that this phenomenon occurs in nature. Many researchers have noted that the results are quite interesting.\",\n  \"config\": {\n    \"level\": \"academic\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/v1/check",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "check"]
+            },
+            "description": "Analyze text with academic-level strictness.\n\nUses the strictest analysis level, appropriate for formal academic writing."
+          },
+          "response": []
+        },
+        {
+          "name": "Analyze Multi-Paragraph Text",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"The study examines various aspects of the phenomenon. Several factors were considered in the analysis.\\n\\nResults indicate that the treatment group showed improvement. These findings suggest possible applications in clinical settings.\\n\\nFurther research is needed to validate these conclusions. The implications of this work extend to multiple domains.\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/v1/check",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "check"]
+            },
+            "description": "Analyze longer text with multiple paragraphs.\n\nReturns per-paragraph analysis with individual density scores."
+          },
+          "response": []
+        },
+        {
+          "name": "Analyze With Domain Terms",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"The convolutional neural network architecture uses backpropagation for gradient descent optimization.\",\n  \"config\": {\n    \"domain_terms\": [\"neural network\", \"backpropagation\", \"gradient descent\", \"convolutional\"]\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/v1/check",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "check"]
+            },
+            "description": "Analyze text with custom domain terminology.\n\nProvide a list of domain-specific terms that should not be flagged as jargon."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Configuration",
+      "description": "Configuration and domain management",
+      "item": [
+        {
+          "name": "List Domains",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/domains",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "domains"]
+            },
+            "description": "List all available built-in domain configurations.\n\nReturns domains that can be used in the `domain` config parameter."
+          },
+          "response": [
+            {
+              "name": "Domains List",
+              "originalRequest": {
+                "method": "GET",
+                "url": {
+                  "raw": "{{base_url}}/v1/domains",
+                  "host": ["{{base_url}}"],
+                  "path": ["v1", "domains"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"domains\": [\n    \"physics\",\n    \"biology\",\n    \"chemistry\",\n    \"medicine\",\n    \"computer_science\",\n    \"mathematics\",\n    \"psychology\",\n    \"economics\"\n  ]\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "API Info",
+      "description": "API information endpoints",
+      "item": [
+        {
+          "name": "API Root",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/",
+              "host": ["{{base_url}}"],
+              "path": [""]
+            },
+            "description": "Get API information and documentation links."
+          },
+          "response": []
+        },
+        {
+          "name": "OpenAPI Schema",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/openapi.json",
+              "host": ["{{base_url}}"],
+              "path": ["openapi.json"]
+            },
+            "description": "Get the OpenAPI 3.0 schema for the API.\n\nUse this for generating clients or importing into other tools."
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}
