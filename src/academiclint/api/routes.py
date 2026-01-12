@@ -19,50 +19,26 @@ try:
     @router.post(
         "/check",
         response_model=CheckResponse,
-        tags=["analysis"],
+        tags=["Analysis"],
         summary="Analyze text for clarity issues",
-        description="""
-Analyze academic text for semantic clarity issues.
-
-This endpoint performs comprehensive analysis including:
-- **Semantic density calculation**: Measures meaningful content ratio
-- **Issue detection**: Identifies 8 types of clarity problems
-- **Actionable suggestions**: Provides specific improvements
-
-### Strictness Levels
-- `relaxed`: Minimal flagging, catches only severe issues
-- `standard`: Balanced analysis for general academic writing
-- `strict`: Thorough analysis for publication-ready work
-- `academic`: Maximum strictness for peer-reviewed submissions
-
-### Domains
-Specify a domain to customize detection for your field:
-`philosophy`, `computer-science`, `medicine`, `law`, `history`,
-`psychology`, `economics`, `physics`, `biology`, `sociology`
-        """,
-        responses={
-            200: {
-                "description": "Analysis completed successfully",
-                "model": CheckResponse,
-            },
-            400: {
-                "description": "Invalid request (empty text or invalid config)",
-                "model": ErrorResponse,
-            },
-            500: {
-                "description": "Internal server error during analysis",
-                "model": ErrorResponse,
-            },
-        },
+        response_description="Analysis results with density score and detected issues",
     )
     async def check_text(request: CheckRequest):
-        """Analyze text for semantic clarity issues."""
-        if not request.text or not request.text.strip():
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Text cannot be empty",
-            )
+        """Analyze text for semantic clarity issues.
 
+        Performs a comprehensive analysis of the provided text, detecting:
+        - Vague or imprecise language
+        - Excessive hedging
+        - Circular definitions
+        - Claims needing citations
+        - Filler phrases and padding
+        - Unsupported causal claims
+        - Domain-specific jargon
+        - Weasel words
+
+        Returns a detailed report including per-paragraph density scores,
+        individual flags for each detected issue, and improvement suggestions.
+        """
         try:
             # Build config from request
             config = Config()
@@ -103,26 +79,17 @@ Specify a domain to customize detection for your field:
     @router.get(
         "/health",
         response_model=HealthResponse,
-        tags=["health"],
-        summary="Health check",
-        description="""
-Check the health status of the API server.
-
-Returns the current status, version, and whether NLP models are loaded.
-Use this endpoint for:
-- Load balancer health checks
-- Kubernetes liveness/readiness probes
-- Monitoring and alerting systems
-        """,
-        responses={
-            200: {
-                "description": "Service is healthy",
-                "model": HealthResponse,
-            },
-        },
+        tags=["Health"],
+        summary="Check service health",
+        response_description="Health status including version and model state",
     )
     async def health_check():
-        """Health check endpoint."""
+        """Health check endpoint.
+
+        Returns the current health status of the API service,
+        including version information and whether NLP models are loaded.
+        Use this endpoint for monitoring and load balancer health checks.
+        """
         return HealthResponse(
             status="healthy",
             version=__version__,
@@ -131,36 +98,20 @@ Use this endpoint for:
 
     @router.get(
         "/domains",
-        response_model=DomainsResponse,
-        tags=["domains"],
+        tags=["Configuration"],
         summary="List available domains",
-        description="""
-List all available academic domain vocabularies.
-
-Domains contain field-specific terminology that won't be flagged as jargon
-when the domain is specified in analysis requests.
-
-### Built-in Domains
-- **philosophy**: Epistemology, ontology, ethics terminology
-- **computer-science**: Programming, algorithms, systems terms
-- **medicine**: Clinical, anatomical, pharmacological vocabulary
-- **law**: Legal terminology and Latin phrases
-- **history**: Historiographical and period-specific terms
-- **psychology**: Cognitive, behavioral, clinical terms
-- **economics**: Micro/macro economics vocabulary
-- **physics**: Theoretical and applied physics terms
-- **biology**: Molecular, ecological, evolutionary terms
-- **sociology**: Social theory and research methodology terms
-        """,
-        responses={
-            200: {
-                "description": "List of available domains",
-                "model": DomainsResponse,
-            },
-        },
+        response_description="List of built-in domain configurations",
     )
     async def list_domains():
-        """List available domains."""
+        """List available academic domains.
+
+        Returns a list of built-in domain configurations that can be used
+        to customize the analysis. Each domain includes specialized terminology
+        that won't be flagged as jargon when analyzing domain-specific text.
+
+        Available domains typically include: physics, biology, chemistry,
+        medicine, computer_science, and more.
+        """
         manager = DomainManager()
         domains = manager.list_domains()
         return DomainsResponse(

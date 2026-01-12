@@ -1,106 +1,118 @@
-"""FastAPI application for AcademicLint."""
+"""FastAPI application for AcademicLint.
+
+This module provides the REST API for semantic clarity analysis.
+API documentation is available at /docs (Swagger UI) or /redoc (ReDoc).
+"""
 
 try:
     from fastapi import FastAPI
-    from fastapi.openapi.utils import get_openapi
+    from fastapi.middleware.cors import CORSMiddleware
 
     from academiclint import __version__
     from academiclint.api.routes import router
 
-    DESCRIPTION = """
-## AcademicLint API
+    # API metadata for OpenAPI documentation
+    API_TITLE = "AcademicLint API"
+    API_DESCRIPTION = """
+## Semantic Clarity Analyzer for Academic Writing
 
-A semantic clarity analyzer for academic writing that detects common issues
-in scholarly prose and provides actionable suggestions for improvement.
+AcademicLint analyzes text for semantic clarity issues commonly found in academic writing.
+It detects vague language, hedging, circular definitions, and other issues that reduce clarity.
 
 ### Features
 
-- **Semantic Density Analysis**: Measures the ratio of meaningful content to filler
-- **Eight Detection Types**: Identifies vagueness, unsupported causation, circular definitions, weasel words, hedge stacking, jargon density, missing citations, and filler phrases
-- **Domain-Aware Analysis**: Customize detection with academic domain vocabularies
-- **Multiple Strictness Levels**: From relaxed to academic-grade strictness
+- **Vagueness Detection**: Identifies imprecise terms like "various", "significant", "generally"
+- **Hedge Detection**: Flags excessive hedging like "might", "could possibly", "tends to"
+- **Circular Definition Detection**: Catches tautological definitions
+- **Citation Needed Detection**: Highlights claims that need supporting evidence
+- **Filler Phrase Detection**: Identifies padding that adds no meaning
+- **Causal Overreach Detection**: Flags unsupported causal claims
+- **Jargon Detection**: Identifies domain-specific terms (configurable)
+- **Weasel Word Detection**: Catches vague attributions like "some say", "experts believe"
+
+### Semantic Density Score
+
+Each analysis returns a **density score** (0.0-1.0) indicating the ratio of
+meaningful content to filler. Higher scores indicate clearer, more precise writing.
+
+| Grade | Score | Interpretation |
+|-------|-------|----------------|
+| A | ≥0.8 | Excellent clarity |
+| B | ≥0.65 | Good clarity |
+| C | ≥0.5 | Acceptable |
+| D | ≥0.35 | Needs improvement |
+| F | <0.35 | Poor clarity |
 
 ### Quick Start
 
-```python
-import requests
-
-response = requests.post(
-    "http://localhost:8080/v1/check",
-    json={"text": "Your academic text here..."}
-)
-print(response.json()["summary"]["density_grade"])
+```bash
+curl -X POST http://localhost:8080/v1/check \\
+  -H "Content-Type: application/json" \\
+  -d '{"text": "This is somewhat important."}'
 ```
-
-### Authentication
-
-Currently, the API does not require authentication. For production deployments,
-consider adding API key authentication via a reverse proxy.
-
-### Rate Limiting
-
-No rate limiting is enforced by default. Configure rate limiting at the
-infrastructure level for production use.
 """
 
-    TAGS_METADATA = [
+    API_TAGS = [
         {
-            "name": "analysis",
-            "description": "Text analysis endpoints for checking semantic clarity",
+            "name": "Analysis",
+            "description": "Text analysis endpoints for semantic clarity checking",
         },
         {
-            "name": "domains",
-            "description": "Domain vocabulary management and listing",
+            "name": "Health",
+            "description": "Service health and status endpoints",
         },
         {
-            "name": "health",
-            "description": "Health check and status endpoints",
+            "name": "Configuration",
+            "description": "Configuration and domain management endpoints",
         },
     ]
 
     app = FastAPI(
-        title="AcademicLint API",
-        description=DESCRIPTION,
+        title=API_TITLE,
+        description=API_DESCRIPTION,
         version=__version__,
-        openapi_tags=TAGS_METADATA,
+        openapi_tags=API_TAGS,
+        docs_url="/docs",
+        redoc_url="/redoc",
+        openapi_url="/openapi.json",
+        license_info={
+            "name": "Polyform Small Business License 1.0.0",
+            "url": "https://polyformproject.org/licenses/small-business/1.0.0/",
+        },
         contact={
             "name": "AcademicLint Support",
-            "url": "https://github.com/academiclint/academiclint",
+            "email": "support@academiclint.dev",
         },
-        license_info={
-            "name": "MIT",
-            "url": "https://opensource.org/licenses/MIT",
-        },
-        openapi_url="/v1/openapi.json",
-        docs_url="/v1/docs",
-        redoc_url="/v1/redoc",
     )
 
+    # CORS middleware
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],  # Configure appropriately for production
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+    # Include API routes
     app.include_router(router, prefix="/v1")
 
-    def custom_openapi():
-        """Generate custom OpenAPI schema with additional metadata."""
-        if app.openapi_schema:
-            return app.openapi_schema
-        openapi_schema = get_openapi(
-            title=app.title,
-            version=app.version,
-            description=app.description,
-            routes=app.routes,
-            tags=TAGS_METADATA,
-        )
-        openapi_schema["info"]["x-logo"] = {
-            "url": "https://raw.githubusercontent.com/academiclint/academiclint/main/docs/logo.png"
+    # Root endpoint
+    @app.get("/", include_in_schema=False)
+    async def root():
+        """Redirect to API documentation."""
+        return {
+            "message": "AcademicLint API",
+            "version": __version__,
+            "docs": "/docs",
+            "openapi": "/openapi.json",
         }
-        # Add server information
-        openapi_schema["servers"] = [
-            {"url": "http://localhost:8080", "description": "Local development server"},
-            {"url": "https://api.academiclint.io", "description": "Production server"},
-        ]
-        app.openapi_schema = openapi_schema
-        return app.openapi_schema
 
-    app.openapi = custom_openapi
+    # Health check at root level (for load balancers)
+    @app.get("/health", include_in_schema=False)
+    async def root_health():
+        """Root-level health check for load balancers."""
+        return {"status": "healthy", "version": __version__}
 
 except ImportError:
     # FastAPI not installed
