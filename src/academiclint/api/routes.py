@@ -1,10 +1,17 @@
 """API routes for AcademicLint."""
 
 try:
-    from fastapi import APIRouter, HTTPException
+    from fastapi import APIRouter, HTTPException, status
 
     from academiclint import Config, Linter, __version__
-    from academiclint.api.schemas import CheckRequest, CheckResponse, HealthResponse
+    from academiclint.api.schemas import (
+        CheckRequest,
+        CheckResponse,
+        DomainInfo,
+        DomainsResponse,
+        ErrorResponse,
+        HealthResponse,
+    )
     from academiclint.domains import DomainManager
 
     router = APIRouter()
@@ -37,8 +44,18 @@ try:
             config = Config()
             if request.config:
                 if request.config.level:
+                    if request.config.level not in ("relaxed", "standard", "strict", "academic"):
+                        raise HTTPException(
+                            status_code=status.HTTP_400_BAD_REQUEST,
+                            detail=f"Invalid level '{request.config.level}'. Must be one of: relaxed, standard, strict, academic",
+                        )
                     config.level = request.config.level
                 if request.config.min_density is not None:
+                    if not 0.0 <= request.config.min_density <= 1.0:
+                        raise HTTPException(
+                            status_code=status.HTTP_400_BAD_REQUEST,
+                            detail="min_density must be between 0.0 and 1.0",
+                        )
                     config.min_density = request.config.min_density
                 if request.config.domain:
                     config.domain = request.config.domain
@@ -51,8 +68,13 @@ try:
             # Convert to response format
             return _result_to_response(result)
 
+        except HTTPException:
+            raise
         except Exception as e:
-            raise HTTPException(status_code=500, detail=str(e))
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=str(e),
+            )
 
     @router.get(
         "/health",
@@ -91,7 +113,10 @@ try:
         medicine, computer_science, and more.
         """
         manager = DomainManager()
-        return {"domains": manager.list_domains()}
+        domains = manager.list_domains()
+        return DomainsResponse(
+            domains=[DomainInfo(**d) if isinstance(d, dict) else d for d in domains]
+        )
 
     def _result_to_response(result) -> dict:
         """Convert AnalysisResult to API response."""
