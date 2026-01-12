@@ -220,20 +220,29 @@ package-zip: ## Build standalone zip archive
 	./scripts/package.sh zip
 
 # =============================================================================
-# Release
+# Release & Versioning
 # =============================================================================
 
 version: ## Show current version
 	@$(PYTHON) -c "from $(PACKAGE) import __version__; print(__version__)"
 
-release-patch: ## Bump patch version (0.0.X)
-	@echo "$(YELLOW)Version bumping requires manual update in pyproject.toml$(NC)"
+version-info: ## Show detailed version info
+	@$(PYTHON) -c "from $(PACKAGE).version import get_version_info; v = get_version_info(); print(f'Version: {v}\nMajor: {v.major}\nMinor: {v.minor}\nPatch: {v.patch}\nStable: {v.is_stable}')"
 
-release-minor: ## Bump minor version (0.X.0)
-	@echo "$(YELLOW)Version bumping requires manual update in pyproject.toml$(NC)"
+bump-patch: ## Bump patch version (0.0.X)
+	$(PYTHON) scripts/bump_version.py patch
 
-release-major: ## Bump major version (X.0.0)
-	@echo "$(YELLOW)Version bumping requires manual update in pyproject.toml$(NC)"
+bump-minor: ## Bump minor version (0.X.0)
+	$(PYTHON) scripts/bump_version.py minor
+
+bump-major: ## Bump major version (X.0.0)
+	$(PYTHON) scripts/bump_version.py major
+
+bump-set: ## Set specific version (make bump-set VERSION=1.2.3)
+	$(PYTHON) scripts/bump_version.py set $(VERSION)
+
+bump-dry-run: ## Show what version bump would do
+	$(PYTHON) scripts/bump_version.py patch --dry-run
 
 # =============================================================================
 # Pre-commit
