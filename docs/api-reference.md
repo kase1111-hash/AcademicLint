@@ -1,5 +1,18 @@
 # API Reference
 
+## Interactive API Documentation
+
+AcademicLint provides interactive API documentation via Swagger UI and ReDoc when the server is running:
+
+- **Swagger UI**: `http://localhost:8080/v1/docs` - Interactive API explorer
+- **ReDoc**: `http://localhost:8080/v1/redoc` - Beautiful API documentation
+- **OpenAPI JSON**: `http://localhost:8080/v1/openapi.json` - Raw OpenAPI schema
+
+### Additional Resources
+
+- [OpenAPI Specification](./openapi.yaml) - Complete OpenAPI 3.1.0 specification
+- [Postman Collection](./postman_collection.json) - Import into Postman for easy testing
+
 ## Python Library
 
 ### Linter

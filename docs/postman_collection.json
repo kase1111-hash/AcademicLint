@@ -1,0 +1,439 @@
+{
+  "info": {
+    "_postman_id": "academiclint-api-collection",
+    "name": "AcademicLint API",
+    "description": "A semantic clarity analyzer for academic writing that detects common issues in scholarly prose and provides actionable suggestions for improvement.\n\n## Features\n\n- **Semantic Density Analysis**: Measures the ratio of meaningful content to filler\n- **Eight Detection Types**: Identifies vagueness, unsupported causation, circular definitions, weasel words, hedge stacking, jargon density, missing citations, and filler phrases\n- **Domain-Aware Analysis**: Customize detection with academic domain vocabularies\n- **Multiple Strictness Levels**: From relaxed to academic-grade strictness\n\n## Getting Started\n\n1. Start the AcademicLint server: `academiclint serve --port 8080`\n2. Import this collection into Postman\n3. Set the `base_url` variable to your server address\n4. Start making requests!",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "version": "1.0.0"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8080",
+      "type": "string",
+      "description": "Base URL for the AcademicLint API server"
+    }
+  ],
+  "item": [
+    {
+      "name": "Analysis",
+      "description": "Text analysis endpoints for checking semantic clarity",
+      "item": [
+        {
+          "name": "Analyze Text - Basic",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"The phenomenon of consciousness is fundamentally important. Some researchers believe it emerges from neural processes.\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/v1/check",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "check"]
+            },
+            "description": "Analyze text using default configuration settings (standard strictness level)."
+          },
+          "response": [
+            {
+              "name": "Successful Analysis",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"text\": \"The phenomenon of consciousness is fundamentally important. Some researchers believe it emerges from neural processes.\"\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/v1/check",
+                  "host": ["{{base_url}}"],
+                  "path": ["v1", "check"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"id\": \"check_a1b2c3d4\",\n  \"created_at\": \"2025-01-11T10:30:00Z\",\n  \"input_length\": 127,\n  \"processing_time_ms\": 234,\n  \"summary\": {\n    \"density\": 0.62,\n    \"density_grade\": \"adequate\",\n    \"flag_count\": 2,\n    \"word_count\": 22,\n    \"sentence_count\": 2,\n    \"paragraph_count\": 1,\n    \"concept_count\": 8,\n    \"filler_ratio\": 0.05,\n    \"suggestion_count\": 2\n  },\n  \"paragraphs\": [\n    {\n      \"index\": 0,\n      \"text\": \"The phenomenon of consciousness is fundamentally important. Some researchers believe it emerges from neural processes.\",\n      \"span\": {\"start\": 0, \"end\": 127},\n      \"density\": 0.62,\n      \"word_count\": 22,\n      \"sentence_count\": 2,\n      \"flags\": [\n        {\n          \"type\": \"UNDERSPECIFIED\",\n          \"term\": \"fundamentally important\",\n          \"span\": {\"start\": 31, \"end\": 54},\n          \"line\": 1,\n          \"column\": 32,\n          \"severity\": \"MEDIUM\",\n          \"message\": \"Vague intensifier without specific meaning\",\n          \"suggestion\": \"Specify why or how it is important\",\n          \"example_revision\": \"essential for understanding human cognition\",\n          \"context\": \"...consciousness is fundamentally important. Some...\"\n        },\n        {\n          \"type\": \"WEASEL\",\n          \"term\": \"Some researchers\",\n          \"span\": {\"start\": 56, \"end\": 72},\n          \"line\": 1,\n          \"column\": 57,\n          \"severity\": \"MEDIUM\",\n          \"message\": \"Vague attribution without specific source\",\n          \"suggestion\": \"Specify which researchers or cite sources\",\n          \"example_revision\": \"Dennett and Chalmers (2020) argue that...\",\n          \"context\": \"...important. Some researchers believe it...\"\n        }\n      ]\n    }\n  ],\n  \"overall_suggestions\": [\n    \"Consider specifying which researchers you're referencing\",\n    \"Add citations to support claims about consciousness\"\n  ]\n}"
+            }
+          ]
+        },
+        {
+          "name": "Analyze Text - With Domain",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"The ontological status of mathematical objects remains contentious. Platonists argue that numbers exist independently of human thought, while nominalists contend that mathematical entities are merely useful fictions.\",\n  \"config\": {\n    \"level\": \"standard\",\n    \"domain\": \"philosophy\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/v1/check",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "check"]
+            },
+            "description": "Analyze philosophy text with domain-specific configuration to avoid flagging field-specific terminology as jargon."
+          },
+          "response": []
+        },
+        {
+          "name": "Analyze Text - Strict Mode",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"Research shows that the algorithm performs well in most cases. It is generally believed that this approach is better than traditional methods.\",\n  \"config\": {\n    \"level\": \"strict\",\n    \"min_density\": 0.6\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/v1/check",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "check"]
+            },
+            "description": "Analyze text using strict mode for publication-ready work with higher density requirements."
+          },
+          "response": []
+        },
+        {
+          "name": "Analyze Text - Academic Mode",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"The results suggest that there may be a relationship between the variables. Further research is needed to confirm these findings.\",\n  \"config\": {\n    \"level\": \"academic\",\n    \"min_density\": 0.7\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/v1/check",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "check"]
+            },
+            "description": "Analyze text using academic mode with maximum strictness for peer-reviewed submissions."
+          },
+          "response": []
+        },
+        {
+          "name": "Analyze Text - Custom Domain Terms",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"The quantum chromodynamics model predicts asymptotic freedom at high energies. Gluon self-interactions lead to confinement of color charge.\",\n  \"config\": {\n    \"level\": \"standard\",\n    \"domain\": \"physics\",\n    \"domain_terms\": [\"chromodynamics\", \"asymptotic freedom\", \"gluon\", \"confinement\"]\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/v1/check",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "check"]
+            },
+            "description": "Analyze text with custom domain terms in addition to a built-in domain vocabulary."
+          },
+          "response": []
+        },
+        {
+          "name": "Analyze Text - Computer Science",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"The microservices architecture enables horizontal scaling and fault isolation. Each service communicates via RESTful APIs or message queues, allowing for independent deployment and technology heterogeneity.\",\n  \"config\": {\n    \"level\": \"standard\",\n    \"domain\": \"computer-science\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/v1/check",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "check"]
+            },
+            "description": "Analyze computer science text with domain-specific vocabulary."
+          },
+          "response": []
+        },
+        {
+          "name": "Analyze Text - Medicine",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"The patient presented with acute myocardial infarction characterized by ST-elevation in leads V1-V4. Troponin levels were elevated at 2.5 ng/mL, indicating significant myocardial necrosis.\",\n  \"config\": {\n    \"level\": \"standard\",\n    \"domain\": \"medicine\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/v1/check",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "check"]
+            },
+            "description": "Analyze medical text with clinical vocabulary support."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Domains",
+      "description": "Domain vocabulary management and listing",
+      "item": [
+        {
+          "name": "List Available Domains",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/domains",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "domains"]
+            },
+            "description": "Get a list of all available academic domain vocabularies. Use these domain names in the `config.domain` field when making analysis requests."
+          },
+          "response": [
+            {
+              "name": "Domain List",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/v1/domains",
+                  "host": ["{{base_url}}"],
+                  "path": ["v1", "domains"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"domains\": [\n    {\"name\": \"philosophy\", \"term_count\": 150, \"description\": \"Philosophy and critical theory terminology\"},\n    {\"name\": \"computer-science\", \"term_count\": 200, \"description\": \"Programming, algorithms, and systems terms\"},\n    {\"name\": \"medicine\", \"term_count\": 180, \"description\": \"Clinical and biomedical vocabulary\"},\n    {\"name\": \"law\", \"term_count\": 120, \"description\": \"Legal terminology and Latin phrases\"},\n    {\"name\": \"history\", \"term_count\": 100, \"description\": \"Historiographical terms\"},\n    {\"name\": \"psychology\", \"term_count\": 160, \"description\": \"Cognitive and behavioral science terms\"},\n    {\"name\": \"economics\", \"term_count\": 140, \"description\": \"Economic theory vocabulary\"},\n    {\"name\": \"physics\", \"term_count\": 170, \"description\": \"Theoretical and applied physics terms\"},\n    {\"name\": \"biology\", \"term_count\": 190, \"description\": \"Life sciences terminology\"},\n    {\"name\": \"sociology\", \"term_count\": 130, \"description\": \"Social theory and methodology terms\"}\n  ]\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Health",
+      "description": "Health check and status endpoints",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/health",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "health"]
+            },
+            "description": "Check the health status of the API server. Returns the current status, version, and whether NLP models are loaded.\n\nUse this endpoint for:\n- Load balancer health checks\n- Kubernetes liveness/readiness probes\n- Monitoring and alerting systems"
+          },
+          "response": [
+            {
+              "name": "Healthy Response",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/v1/health",
+                  "host": ["{{base_url}}"],
+                  "path": ["v1", "health"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"status\": \"healthy\",\n  \"version\": \"1.0.0\",\n  \"models_loaded\": true\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Error Handling Examples",
+      "description": "Examples of error responses from the API",
+      "item": [
+        {
+          "name": "Empty Text Error",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/v1/check",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "check"]
+            },
+            "description": "Example of error response when text is empty."
+          },
+          "response": [
+            {
+              "name": "Empty Text Error Response",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"text\": \"\"\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/v1/check",
+                  "host": ["{{base_url}}"],
+                  "path": ["v1", "check"]
+                }
+              },
+              "status": "Bad Request",
+              "code": 400,
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"detail\": \"Text cannot be empty\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Invalid Strictness Level",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"Some academic text here.\",\n  \"config\": {\n    \"level\": \"extreme\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/v1/check",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "check"]
+            },
+            "description": "Example of error response when an invalid strictness level is provided."
+          },
+          "response": [
+            {
+              "name": "Invalid Level Error Response",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"text\": \"Some academic text here.\",\n  \"config\": {\n    \"level\": \"extreme\"\n  }\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/v1/check",
+                  "host": ["{{base_url}}"],
+                  "path": ["v1", "check"]
+                }
+              },
+              "status": "Bad Request",
+              "code": 400,
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"detail\": \"Invalid level 'extreme'. Must be one of: relaxed, standard, strict, academic\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Invalid Density Value",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"Some academic text here.\",\n  \"config\": {\n    \"min_density\": 1.5\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/v1/check",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "check"]
+            },
+            "description": "Example of error response when min_density is outside valid range (0.0-1.0)."
+          },
+          "response": [
+            {
+              "name": "Invalid Density Error Response",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"text\": \"Some academic text here.\",\n  \"config\": {\n    \"min_density\": 1.5\n  }\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/v1/check",
+                  "host": ["{{base_url}}"],
+                  "path": ["v1", "check"]
+                }
+              },
+              "status": "Bad Request",
+              "code": 400,
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"detail\": \"min_density must be between 0.0 and 1.0\"\n}"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
