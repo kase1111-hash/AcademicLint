@@ -181,11 +181,19 @@ serve-docs: ## Serve documentation locally
 	@echo "$(YELLOW)Documentation server not configured yet$(NC)"
 
 # =============================================================================
-# Docker
+# Docker & Packaging
 # =============================================================================
 
-docker-build: ## Build Docker image
+docker-build: ## Build Docker image (production)
 	docker build -t $(PACKAGE):latest .
+
+docker-build-api: ## Build Docker API server image
+	docker build --target api -t $(PACKAGE):api .
+
+docker-build-dev: ## Build Docker development image
+	docker build --target development -t $(PACKAGE):dev .
+
+docker-build-all: docker-build docker-build-api docker-build-dev ## Build all Docker images
 
 docker-run: ## Run Docker container
 	docker run -it --rm $(PACKAGE):latest
@@ -195,6 +203,21 @@ docker-test: ## Run tests in Docker
 
 docker-dev: ## Start development environment in Docker
 	docker-compose up -d dev
+
+docker-api: ## Start API server in Docker
+	docker-compose up api
+
+package: clean ## Build all distribution packages
+	./scripts/package.sh all
+
+package-wheel: ## Build Python wheel only
+	./scripts/package.sh wheel
+
+package-docker: ## Build Docker images only
+	./scripts/package.sh docker
+
+package-zip: ## Build standalone zip archive
+	./scripts/package.sh zip
 
 # =============================================================================
 # Release

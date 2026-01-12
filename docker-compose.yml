@@ -1,10 +1,17 @@
+# =============================================================================
 # AcademicLint Docker Compose Configuration
+# =============================================================================
 # Usage:
 #   Development:  docker-compose up dev
 #   Production:   docker-compose up api
 #   Tests:        docker-compose run test
-
-version: '3.8'
+#   Linting:      docker-compose run lint
+#
+# Environment variables (optional):
+#   ACADEMICLINT_ENV       - Environment (development/staging/production)
+#   ACADEMICLINT_LEVEL     - Analysis level (relaxed/standard/strict/academic)
+#   ACADEMICLINT_API_PORT  - API server port (default: 8080)
+# =============================================================================
 
 services:
   # ==========================================================================
@@ -13,19 +20,22 @@ services:
   api:
     build:
       context: .
-      target: production
-    image: academiclint:latest
+      target: api
+    image: academiclint:api
     container_name: academiclint-api
     ports:
-      - "8080:8080"
+      - "${ACADEMICLINT_API_PORT:-8080}:8080"
     environment:
-      - ACADEMICLINT_LEVEL=standard
-      - ACADEMICLINT_WORKERS=2
+      - ACADEMICLINT_ENV=${ACADEMICLINT_ENV:-production}
+      - ACADEMICLINT_LEVEL=${ACADEMICLINT_LEVEL:-standard}
+      - ACADEMICLINT_API_HOST=0.0.0.0
+      - ACADEMICLINT_API_PORT=8080
     volumes:
+      - ./config:/app/config:ro
       - model-cache:/home/academiclint/.cache/academiclint
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/v1/health')"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -41,14 +51,16 @@ services:
     image: academiclint:dev
     container_name: academiclint-dev
     ports:
-      - "8080:8080"
+      - "${ACADEMICLINT_API_PORT:-8080}:8080"
     environment:
-      - ACADEMICLINT_LEVEL=standard
+      - ACADEMICLINT_ENV=development
+      - ACADEMICLINT_LEVEL=${ACADEMICLINT_LEVEL:-standard}
       - PYTHONDONTWRITEBYTECODE=1
     volumes:
       # Mount source for live reloading
-      - ./src:/app/src:ro
-      - ./tests:/app/tests:ro
+      - ./src:/app/src
+      - ./tests:/app/tests
+      - ./config:/app/config:ro
       - model-cache:/home/academiclint/.cache/academiclint
     command: >
       python -m academiclint.cli.main serve
