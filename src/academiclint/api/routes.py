@@ -9,7 +9,6 @@ try:
         CheckResponse,
         DomainInfo,
         DomainsResponse,
-        ErrorResponse,
         HealthResponse,
     )
     from academiclint.domains import DomainManager
@@ -74,7 +73,7 @@ try:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=str(e),
-            )
+            ) from e
 
     @router.get(
         "/health",
@@ -120,52 +119,7 @@ try:
 
     def _result_to_response(result) -> dict:
         """Convert AnalysisResult to API response."""
-        paragraphs = []
-        for para in result.paragraphs:
-            flags = []
-            for flag in para.flags:
-                flags.append({
-                    "type": flag.type.value,
-                    "term": flag.term,
-                    "span": {"start": flag.span.start, "end": flag.span.end},
-                    "line": flag.line,
-                    "column": flag.column,
-                    "severity": flag.severity.value,
-                    "message": flag.message,
-                    "suggestion": flag.suggestion,
-                    "example_revision": flag.example_revision,
-                    "context": flag.context,
-                })
-
-            paragraphs.append({
-                "index": para.index,
-                "text": para.text,
-                "span": {"start": para.span.start, "end": para.span.end},
-                "density": para.density,
-                "word_count": para.word_count,
-                "sentence_count": para.sentence_count,
-                "flags": flags,
-            })
-
-        return {
-            "id": result.id,
-            "created_at": result.created_at,
-            "input_length": result.input_length,
-            "processing_time_ms": result.processing_time_ms,
-            "summary": {
-                "density": result.summary.density,
-                "density_grade": result.summary.density_grade,
-                "flag_count": result.summary.flag_count,
-                "word_count": result.summary.word_count,
-                "sentence_count": result.summary.sentence_count,
-                "paragraph_count": result.summary.paragraph_count,
-                "concept_count": result.summary.concept_count,
-                "filler_ratio": result.summary.filler_ratio,
-                "suggestion_count": result.summary.suggestion_count,
-            },
-            "paragraphs": paragraphs,
-            "overall_suggestions": result.overall_suggestions,
-        }
+        return result.to_dict()
 
 except ImportError:
     # FastAPI not installed
