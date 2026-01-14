@@ -33,6 +33,10 @@ class Span:
     start: int
     end: int
 
+    def to_dict(self) -> dict:
+        """Convert to dictionary."""
+        return {"start": self.start, "end": self.end}
+
 
 @dataclass
 class Flag:
@@ -49,6 +53,21 @@ class Flag:
     example_revision: Optional[str] = None  # Concrete rewrite example
     context: str = ""  # Surrounding text for display
 
+    def to_dict(self) -> dict:
+        """Convert to dictionary."""
+        return {
+            "type": self.type.value,
+            "term": self.term,
+            "span": self.span.to_dict(),
+            "line": self.line,
+            "column": self.column,
+            "severity": self.severity.value,
+            "message": self.message,
+            "suggestion": self.suggestion,
+            "example_revision": self.example_revision,
+            "context": self.context,
+        }
+
 
 @dataclass
 class ParagraphResult:
@@ -61,6 +80,18 @@ class ParagraphResult:
     flags: list[Flag] = field(default_factory=list)
     word_count: int = 0
     sentence_count: int = 0
+
+    def to_dict(self) -> dict:
+        """Convert to dictionary."""
+        return {
+            "index": self.index,
+            "text": self.text,
+            "span": self.span.to_dict(),
+            "density": self.density,
+            "word_count": self.word_count,
+            "sentence_count": self.sentence_count,
+            "flags": [f.to_dict() for f in self.flags],
+        }
 
 
 @dataclass
@@ -76,6 +107,20 @@ class Summary:
     concept_count: int  # Unique meaningful concepts
     filler_ratio: float  # Proportion of filler words
     suggestion_count: int
+
+    def to_dict(self) -> dict:
+        """Convert to dictionary."""
+        return {
+            "density": self.density,
+            "density_grade": self.density_grade,
+            "flag_count": self.flag_count,
+            "word_count": self.word_count,
+            "sentence_count": self.sentence_count,
+            "paragraph_count": self.paragraph_count,
+            "concept_count": self.concept_count,
+            "filler_ratio": self.filler_ratio,
+            "suggestion_count": self.suggestion_count,
+        }
 
 
 @dataclass
@@ -100,3 +145,15 @@ class AnalysisResult:
     def flags(self) -> list[Flag]:
         """All flags across all paragraphs."""
         return [f for p in self.paragraphs for f in p.flags]
+
+    def to_dict(self) -> dict:
+        """Convert to dictionary for serialization."""
+        return {
+            "id": self.id,
+            "created_at": self.created_at,
+            "input_length": self.input_length,
+            "processing_time_ms": self.processing_time_ms,
+            "summary": self.summary.to_dict(),
+            "paragraphs": [p.to_dict() for p in self.paragraphs],
+            "overall_suggestions": self.overall_suggestions,
+        }
