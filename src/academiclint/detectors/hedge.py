@@ -26,14 +26,21 @@ class HedgeDetector(Detector):
             # Split sentence into clauses (roughly)
             clauses = re.split(r"[,;:]", sentence.text)
 
+            # Track position within the sentence text to find each clause
+            search_start = 0
             for clause in clauses:
                 hedge_count = self._count_hedges(clause)
 
                 if hedge_count >= self.HEDGE_THRESHOLD:
-                    # Find the clause in the original text
+                    # Find the clause within the sentence's bounds
                     clause_stripped = clause.strip()
-                    start = doc.text.find(clause_stripped)
-                    if start == -1:
+                    # Search from the current position within the sentence
+                    clause_offset = sentence.text.find(clause_stripped, search_start)
+                    if clause_offset != -1:
+                        start = sentence.span.start + clause_offset
+                        search_start = clause_offset + len(clause_stripped)
+                    else:
+                        # Fallback: use sentence boundaries
                         start = sentence.span.start
                     end = start + len(clause_stripped)
 

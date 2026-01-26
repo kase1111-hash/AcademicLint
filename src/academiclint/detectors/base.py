@@ -50,6 +50,55 @@ class Detector(ABC):
         column = position - line_start + 1
         return line, column
 
+    # Common abbreviations that contain periods but don't end sentences
+    _ABBREVIATIONS = frozenset({
+        "dr.", "mr.", "mrs.", "ms.", "prof.", "sr.", "jr.",
+        "etc.", "e.g.", "i.e.", "vs.", "viz.", "cf.",
+        "fig.", "eq.", "no.", "vol.", "pp.", "ch.",
+        "inc.", "ltd.", "corp.", "co.", "dept.",
+        "jan.", "feb.", "mar.", "apr.", "jun.", "jul.",
+        "aug.", "sep.", "sept.", "oct.", "nov.", "dec.",
+    })
+
+    def _is_sentence_boundary(self, text: str, period_pos: int) -> bool:
+        """Check if a period at the given position is a sentence boundary.
+
+        Args:
+            text: The full text
+            period_pos: Position of the period character
+
+        Returns:
+            True if this period ends a sentence, False otherwise
+        """
+        if period_pos < 0 or period_pos >= len(text):
+            return False
+
+        # Check for common abbreviations by looking backwards
+        word_start = period_pos
+        while word_start > 0 and text[word_start - 1].isalpha():
+            word_start -= 1
+
+        if word_start < period_pos:
+            # Include the period in the potential abbreviation
+            potential_abbrev = text[word_start:period_pos + 1].lower()
+            if potential_abbrev in self._ABBREVIATIONS:
+                return False
+
+        # Check what follows the period (if anything)
+        next_pos = period_pos + 1
+        while next_pos < len(text) and text[next_pos] in " \t":
+            next_pos += 1
+
+        # If followed by newline or capital letter, likely a sentence boundary
+        if next_pos >= len(text):
+            return True
+        if text[next_pos] == "\n":
+            return True
+        if text[next_pos].isupper():
+            return True
+
+        return False
+
     def get_sentence_context(self, text: str, start: int, end: int) -> str:
         """Extract the sentence containing a span.
 
@@ -61,13 +110,32 @@ class Detector(ABC):
         Returns:
             The sentence containing the span
         """
-        # Find sentence boundaries
-        context_start = max(0, text.rfind(".", 0, start) + 1)
-        context_end = text.find(".", end)
-        if context_end == -1:
-            context_end = min(len(text), end + 50)
-        else:
-            context_end += 1
+        # Find sentence start by searching backwards for a true sentence boundary
+        context_start = 0
+        search_pos = start - 1
+        while search_pos >= 0:
+            if text[search_pos] == ".":
+                if self._is_sentence_boundary(text, search_pos):
+                    context_start = search_pos + 1
+                    break
+            elif text[search_pos] in "!?\n":
+                context_start = search_pos + 1
+                break
+            search_pos -= 1
+
+        # Find sentence end by searching forwards for a true sentence boundary
+        context_end = len(text)
+        search_pos = end
+        while search_pos < len(text):
+            if text[search_pos] == ".":
+                if self._is_sentence_boundary(text, search_pos):
+                    context_end = search_pos + 1
+                    break
+            elif text[search_pos] in "!?\n":
+                context_end = search_pos + 1
+                break
+            search_pos += 1
+
         return text[context_start:context_end].strip()
 
     def get_window_context(self, text: str, start: int, end: int, window: int = 30) -> str:

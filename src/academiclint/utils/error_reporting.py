@@ -221,6 +221,7 @@ class StructuredLogger:
         """
         self.name = name
         self.include_traceback = include_traceback
+        self._owns_stream = False
 
         if output == "stderr":
             self._stream = sys.stderr
@@ -228,6 +229,25 @@ class StructuredLogger:
             self._stream = sys.stdout
         else:
             self._stream = open(output, "a")
+            self._owns_stream = True
+
+    def close(self) -> None:
+        """Close the underlying stream if we own it."""
+        if self._owns_stream and self._stream is not None:
+            self._stream.close()
+            self._stream = None
+
+    def __enter__(self) -> "StructuredLogger":
+        """Context manager entry."""
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+        """Context manager exit - closes the stream."""
+        self.close()
+
+    def __del__(self) -> None:
+        """Destructor - ensures file handle is closed."""
+        self.close()
 
     def _log(self, level: str, event: str, **kwargs) -> None:
         """Write a structured log entry."""
