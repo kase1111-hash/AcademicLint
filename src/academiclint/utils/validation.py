@@ -4,11 +4,7 @@ import re
 from pathlib import Path
 from typing import Optional
 
-
-class ValidationError(Exception):
-    """Raised when input validation fails."""
-
-    pass
+from academiclint.core.exceptions import ValidationError
 
 
 # Maximum text length to prevent memory issues
