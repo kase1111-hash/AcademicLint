@@ -1,13 +1,19 @@
 """Semantic density calculation for AcademicLint."""
 
 import re
+from typing import Optional
 
 from academiclint.core.config import Config
 from academiclint.core.result import Flag, FlagType, Severity
 from academiclint.utils.patterns import FUNCTION_WORDS
 
 
-def calculate_density(text: str, flags: list[Flag], config: Config) -> float:
+def calculate_density(
+    text: str,
+    flags: list[Flag],
+    config: Config,
+    tokens_with_lemmas: Optional[list[tuple[str, str, bool]]] = None,
+) -> float:
     """Calculate semantic density score for text.
 
     Components:
@@ -19,24 +25,48 @@ def calculate_density(text: str, flags: list[Flag], config: Config) -> float:
         text: The text to analyze
         flags: List of flags for this text
         config: Linter configuration
+        tokens_with_lemmas: Optional list of (text, lemma, is_stop) tuples
+            from spaCy processing. If provided, uses spaCy's lemmatization
+            instead of the simple suffix-stripping fallback.
 
     Returns:
         Float between 0.0 and 1.0
     """
-    tokens = tokenize(text)
-    if len(tokens) == 0:
-        return 0.0
+    if tokens_with_lemmas is not None:
+        # Use pre-computed tokens from spaCy (more accurate)
+        if len(tokens_with_lemmas) == 0:
+            return 0.0
 
-    # 1. Content word ratio
-    content_words = [t for t in tokens if t.lower() not in FUNCTION_WORDS]
-    content_ratio = len(content_words) / len(tokens) if tokens else 0
+        token_count = len(tokens_with_lemmas)
 
-    # 2. Unique concept ratio (penalize repetition)
-    lemmas = [lemmatize(t) for t in content_words]
-    unique_ratio = len(set(lemmas)) / len(lemmas) if lemmas else 0
+        # 1. Content word ratio (non-stop words)
+        content_tokens = [
+            (text, lemma) for text, lemma, is_stop in tokens_with_lemmas
+            if not is_stop and text.lower() not in FUNCTION_WORDS
+        ]
+        content_ratio = len(content_tokens) / token_count if token_count else 0
+
+        # 2. Unique concept ratio using spaCy lemmas
+        lemmas = [lemma.lower() for _, lemma in content_tokens]
+        unique_ratio = len(set(lemmas)) / len(lemmas) if lemmas else 0
+    else:
+        # Fallback to simple tokenization and lemmatization
+        tokens = tokenize(text)
+        if len(tokens) == 0:
+            return 0.0
+
+        token_count = len(tokens)
+
+        # 1. Content word ratio
+        content_words = [t for t in tokens if t.lower() not in FUNCTION_WORDS]
+        content_ratio = len(content_words) / token_count if token_count else 0
+
+        # 2. Unique concept ratio (penalize repetition)
+        lemmas = [lemmatize(t) for t in content_words]
+        unique_ratio = len(set(lemmas)) / len(lemmas) if lemmas else 0
 
     # 3. Precision penalty (based on flags)
-    flag_penalty = calculate_flag_penalty(flags, len(tokens))
+    flag_penalty = calculate_flag_penalty(flags, token_count)
     precision = 1.0 - flag_penalty
 
     # Weighted combination
@@ -51,7 +81,11 @@ def tokenize(text: str) -> list[str]:
 
 
 def lemmatize(word: str) -> str:
-    """Simple lemmatization - just lowercase and remove common suffixes."""
+    """Simple lemmatization fallback - lowercase and remove common suffixes.
+
+    Note: This is a fallback for when spaCy tokens are not available.
+    For better accuracy, pass tokens_with_lemmas to calculate_density().
+    """
     word = word.lower()
 
     # Remove common suffixes

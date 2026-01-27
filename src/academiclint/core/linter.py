@@ -139,7 +139,15 @@ class Linter:
                     f for f in all_flags
                     if para.span.start <= f.span.start < para.span.end
                 ]
-                density = calculate_density(para.text, para_flags, self.config)
+                # Extract tokens with lemmas from paragraph for accurate density calculation
+                para_tokens = [
+                    (token.text, token.lemma, token.is_stop)
+                    for sent in para.sentences
+                    for token in sent.tokens
+                ]
+                density = calculate_density(
+                    para.text, para_flags, self.config, tokens_with_lemmas=para_tokens
+                )
 
                 para_result = ParagraphResult(
                     index=i,
@@ -170,9 +178,15 @@ class Linter:
                 total_words += para.word_count
                 total_sentences += para.sentence_count
 
-        # Calculate overall density
+        # Calculate overall density using all document tokens
         try:
-            overall_density = calculate_density(text, all_flags, self.config)
+            all_tokens = [
+                (token.text, token.lemma, token.is_stop)
+                for token in doc.tokens
+            ]
+            overall_density = calculate_density(
+                text, all_flags, self.config, tokens_with_lemmas=all_tokens
+            )
         except Exception as e:
             logger.warning(f"Failed to calculate overall density: {e}")
             overall_density = 0.0

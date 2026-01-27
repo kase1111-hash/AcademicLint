@@ -66,12 +66,18 @@ class HedgeDetector(Detector):
         return flags
 
     def _count_hedges(self, clause: str) -> int:
-        """Count hedge words in a clause."""
+        """Count hedge words in a clause.
+
+        Uses word boundary matching to avoid false positives from
+        substring matches (e.g., "display" should not match "may").
+        """
         clause_lower = clause.lower()
         count = 0
 
         for hedge in HEDGES:
-            if hedge.lower() in clause_lower:
+            # Use word boundary regex to match whole words/phrases only
+            pattern = rf"\b{re.escape(hedge.lower())}\b"
+            if re.search(pattern, clause_lower):
                 count += 1
 
         return count

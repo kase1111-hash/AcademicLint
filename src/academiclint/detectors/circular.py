@@ -12,8 +12,27 @@ class CircularDetector(Detector):
     """Detector for circular definitions."""
 
     # Patterns for definition structures
+    # Each pattern should have two groups: (1) the term being defined, (2) the definition
     DEFINITION_PATTERNS = [
+        # "X is/are Y" - basic definition
         r"(\w+)\s+(?:is|are|means?|refers?\s+to)\s+(?:a|an|the)?\s*(.*)",
+        # "X: Y" - colon definition (e.g., "Freedom: the state of being free")
+        r"(\w+)\s*:\s+(?:a|an|the)?\s*(.*)",
+        # "We define X as Y" / "X is defined as Y"
+        r"(?:we\s+)?(?:can\s+)?define\s+(\w+)\s+as\s+(?:a|an|the)?\s*(.*)",
+        r"(\w+)\s+(?:is|are)\s+defined\s+as\s+(?:a|an|the)?\s*(.*)",
+        # "By X we mean Y"
+        r"by\s+(\w+)\s+(?:we|I)\s+mean\s+(?:a|an|the)?\s*(.*)",
+        # "The definition of X is Y"
+        r"the\s+definition\s+of\s+(\w+)\s+is\s+(?:a|an|the)?\s*(.*)",
+        # "X is when Y" (informal definition)
+        r"(\w+)\s+is\s+when\s+(.*)",
+        # "X is understood as Y"
+        r"(\w+)\s+(?:is|are)\s+understood\s+(?:as|to\s+be)\s+(?:a|an|the)?\s*(.*)",
+        # "X is characterized by Y"
+        r"(\w+)\s+(?:is|are)\s+characterized\s+(?:by|as)\s+(?:a|an|the)?\s*(.*)",
+        # "X, that is, Y" / "X, i.e., Y" / "X, namely Y"
+        r"(\w+)\s*,\s*(?:that\s+is|i\.?e\.?|namely)\s*,?\s*(.*)",
     ]
 
     @property
