@@ -227,6 +227,9 @@ class NLPPipeline:
     def _extract_paragraphs(self, text: str, doc: Any) -> list[Paragraph]:
         """Extract paragraphs from text.
 
+        This method reuses the already-processed spaCy doc to avoid
+        re-processing each paragraph through the NLP pipeline.
+
         Args:
             text: Original text
             doc: spaCy Doc object
@@ -241,6 +244,12 @@ class NLPPipeline:
             paragraphs = []
             para_texts = text.split("\n\n")
 
+            # Pre-extract all sentences from the main doc with their spans
+            doc_sentences = [
+                (sent.start_char, sent.end_char, sent)
+                for sent in doc.sents
+            ]
+
             current_pos = 0
             for para_text in para_texts:
                 para_text = para_text.strip()
@@ -254,29 +263,36 @@ class NLPPipeline:
                 end = start + len(para_text)
                 current_pos = end
 
-                # Count words and sentences in paragraph
-                para_doc = self._nlp(para_text)
-                word_count = len([t for t in para_doc if not t.is_punct and not t.is_space])
-                sentence_count = len(list(para_doc.sents))
+                # Find sentences that fall within this paragraph's span
+                # by checking if sentence start is within paragraph bounds
+                para_sentences = []
+                word_count = 0
 
-                # Extract sentences for this paragraph
-                para_sentences = [
-                    Sentence(
-                        text=sent.text,
-                        span=Span(start=start + sent.start_char, end=start + sent.end_char),
-                        tokens=[
+                for sent_start, sent_end, sent in doc_sentences:
+                    # Check if sentence belongs to this paragraph
+                    if sent_start >= start and sent_start < end:
+                        sent_tokens = [
                             Token(
                                 text=token.text,
                                 lemma=token.lemma_,
                                 pos=token.pos_,
                                 is_stop=token.is_stop,
-                                idx=start + token.idx,
+                                idx=token.idx,
                             )
                             for token in sent
-                        ],
-                    )
-                    for sent in para_doc.sents
-                ]
+                        ]
+                        para_sentences.append(
+                            Sentence(
+                                text=sent.text,
+                                span=Span(start=sent_start, end=sent_end),
+                                tokens=sent_tokens,
+                            )
+                        )
+                        # Count words in this sentence (non-punctuation, non-space)
+                        word_count += len([
+                            t for t in sent
+                            if not t.is_punct and not t.is_space
+                        ])
 
                 paragraphs.append(
                     Paragraph(
@@ -284,7 +300,7 @@ class NLPPipeline:
                         span=Span(start=start, end=end),
                         sentences=para_sentences,
                         word_count=word_count,
-                        sentence_count=sentence_count,
+                        sentence_count=len(para_sentences),
                     )
                 )
 
