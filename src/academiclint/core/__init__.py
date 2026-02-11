@@ -1,17 +1,6 @@
 """Core linting engine for AcademicLint."""
 
 from academiclint.core.config import Config, OutputConfig
-from academiclint.core.environments import (
-    Environment,
-    EnvironmentConfig,
-    get_config,
-    get_environment,
-    get_environment_config,
-    is_development,
-    is_production,
-    is_staging,
-    is_test,
-)
 from academiclint.core.exceptions import (
     AcademicLintError,
     ConfigurationError,
@@ -39,16 +28,6 @@ __all__ = [
     "Linter",
     "Config",
     "OutputConfig",
-    # Environment
-    "Environment",
-    "EnvironmentConfig",
-    "get_environment",
-    "get_environment_config",
-    "get_config",
-    "is_development",
-    "is_staging",
-    "is_production",
-    "is_test",
     # Results
     "AnalysisResult",
     "ParagraphResult",

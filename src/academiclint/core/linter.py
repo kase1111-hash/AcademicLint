@@ -5,7 +5,7 @@ import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Iterator, Optional
+from typing import Optional
 
 from academiclint.core.config import Config
 from academiclint.core.exceptions import (
@@ -288,24 +288,6 @@ class Linter:
                 raise
 
         return results
-
-    def check_stream(self, text: str) -> Iterator[ParagraphResult]:
-        """Stream analysis paragraph by paragraph.
-
-        For large documents, this allows processing without loading
-        the entire result into memory.
-
-        Args:
-            text: The text to analyze
-
-        Yields:
-            ParagraphResult for each paragraph
-
-        Raises:
-            ValidationError: If the text is invalid
-        """
-        result = self.check(text)
-        yield from result.paragraphs
 
     def _get_density_grade(self, density: float) -> str:
         """Convert density score to grade label."""
