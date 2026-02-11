@@ -30,6 +30,14 @@ class TestCausalDetector:
             sentences: list = None
             paragraphs: list = None
 
+            def get_sentence_for_span(self, start, end):
+                if not self.sentences:
+                    return None
+                for sent in self.sentences:
+                    if hasattr(sent, 'span') and sent.span.start <= start and end <= sent.span.end:
+                        return sent
+                return None
+
         doc = MockDoc(text="Social media causes depression in teenagers.")
         flags = detector.detect(doc, config)
 
@@ -50,6 +58,14 @@ class TestCausalDetector:
             sentences: list = None
             paragraphs: list = None
 
+            def get_sentence_for_span(self, start, end):
+                if not self.sentences:
+                    return None
+                for sent in self.sentences:
+                    if hasattr(sent, 'span') and sent.span.start <= start and end <= sent.span.end:
+                        return sent
+                return None
+
         doc = MockDoc(text="Social media causes depression (Smith, 2023).")
         flags = detector.detect(doc, config)
 
@@ -65,6 +81,14 @@ class TestCausalDetector:
             text: str
             sentences: list = None
             paragraphs: list = None
+
+            def get_sentence_for_span(self, start, end):
+                if not self.sentences:
+                    return None
+                for sent in self.sentences:
+                    if hasattr(sent, 'span') and sent.span.start <= start and end <= sent.span.end:
+                        return sent
+                return None
 
         doc = MockDoc(
             text="The policy led to changes. This resulted in improvements. Due to the weather."

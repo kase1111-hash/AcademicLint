@@ -178,6 +178,30 @@ class Detector(ABC):
                 return True
         return False
 
+    def has_citation_in_sentence(self, doc, match_start: int, match_end: int) -> bool:
+        """Check if there's a citation anywhere in the same sentence as the match.
+
+        More accurate than window-based checking: finds citations regardless
+        of distance from the match, as long as they're in the same sentence.
+
+        Args:
+            doc: ProcessedDocument (or any object with get_sentence_for_span and .text)
+            match_start: Start offset of the match
+            match_end: End offset of the match
+
+        Returns:
+            True if a citation exists in the same sentence
+        """
+        sentence = doc.get_sentence_for_span(match_start, match_end)
+        if sentence is not None:
+            for pattern in CITATION_PATTERNS:
+                if re.search(pattern, sentence.text):
+                    return True
+            return False
+
+        # Fallback: if no sentence structure, use window-based check
+        return self.has_nearby_citation(doc.text, match_end)
+
     def create_flag(
         self,
         text: str,

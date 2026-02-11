@@ -1,73 +1,44 @@
 """Pattern definitions for AcademicLint detectors."""
 
-# Vague terms that lack clear referents
+# Vague terms that lack clear referents.
+#
+# Curated to ~30 terms that are genuinely vague in most academic contexts.
+# Removed: demonstrative pronouns (this/that/these/those) which are usually
+# clear when attached to a noun ("this paper", "those results"); common
+# academic vocabulary (factor, issue, area, individual, element); and verbs
+# that are too common to flag without context (change, relate, concern, involve).
 VAGUE_TERMS = {
-    # Pronouns/determiners (context-dependent)
-    "this",
-    "that",
-    "these",
-    "those",
-    # Vague nouns
+    # Genuinely vague nouns — almost never specific enough
     "thing",
     "things",
     "stuff",
-    "aspect",
-    "aspects",
-    "factor",
-    "factors",
-    "issue",
-    "issues",
-    "matter",
-    "element",
-    "elements",
-    "area",
-    "areas",
     "society",
     "people",
-    "individual",
-    "individuals",
-    # Vague adjectives
+    # Vague adjectives — evaluative without evidence
     "significant",
     "important",
     "interesting",
-    "various",
-    "certain",
-    "particular",
-    "specific",
-    "general",
     "good",
     "bad",
-    "positive",
-    "negative",
     "big",
-    "small",
     "large",
     "great",
-    # Vague adverbs
+    # Intensifiers — add emphasis without substance
     "very",
     "really",
     "quite",
     "rather",
-    "somewhat",
-    "fairly",
-    "pretty",
     "extremely",
     "incredibly",
-    "dramatically",
-    "significantly",
-    "substantially",
-    "recently",
+    # Vague quantifiers — should be replaced with data
+    "many",
+    "some",
+    "most",
     "often",
     "sometimes",
-    "usually",
-    # Vague verbs
-    "affect",
+    "recently",
+    # Vague verb
     "impact",
-    "influence",
-    "change",
-    "involve",
-    "relate",
-    "concern",
 }
 
 # Patterns indicating causal claims
@@ -89,7 +60,8 @@ CAUSAL_PATTERNS = [
 CITATION_PATTERNS = [
     r"\([A-Z][a-z]+,?\s+\d{4}\)",  # (Author, 2023)
     r"\([A-Z][a-z]+\s+et al\.,?\s+\d{4}\)",  # (Author et al., 2023)
-    r"\[\d+\]",  # [1]
+    r"[A-Z][a-z]+\s+\(\d{4}\)",  # Author (2023)
+    r"\[\d+(?:,\s*\d+)*\]",  # [1] or [1, 2, 3]
     r"\[[\w\s,]+\d{4}\]",  # [Author 2023]
 ]
 
@@ -157,7 +129,7 @@ FILLER_PHRASES = [
 
 # Patterns indicating need for citation
 NEEDS_CITATION_PATTERNS = [
-    r"\b\d+%\b",  # Statistics
+    r"\b\d+%",  # Statistics
     r"\b(studies?|research)\s+(shows?|found)\b",
     r"\b(in|during|since)\s+\d{4}\b",  # Historical dates
     r"\baccording to\b(?!\s*[\(\[])",  # Attribution without cite

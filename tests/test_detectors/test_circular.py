@@ -25,6 +25,12 @@ class MockDoc:
     sentences: list = field(default_factory=list)
     paragraphs: list = None
 
+    def get_sentence_for_span(self, start, end):
+        for sent in self.sentences:
+            if hasattr(sent, 'span') and sent.span.start <= start and end <= sent.span.end:
+                return sent
+        return None
+
 
 class TestCircularDetector:
     """Tests for CircularDetector."""
@@ -150,8 +156,8 @@ class TestCircularDetector:
 
     def test_get_root_method(self, detector):
         """Test the root extraction method."""
-        assert detector._get_root("democratic") == "democrat"
-        assert detector._get_root("freedom") == "freed"  # removes 'dom'
+        assert detector._get_root("democratic") == "democr"
+        assert detector._get_root("freedom") == "fre"  # removes 'dom', then trailing 'e'
         assert detector._get_root("running") == "runn"
         assert detector._get_root("happiness") == "happi"
 

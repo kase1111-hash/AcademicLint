@@ -25,6 +25,12 @@ class MockDoc:
     sentences: list = field(default_factory=list)
     paragraphs: list = None
 
+    def get_sentence_for_span(self, start, end):
+        for sent in self.sentences:
+            if hasattr(sent, 'span') and sent.span.start <= start and end <= sent.span.end:
+                return sent
+        return None
+
 
 class TestCitationDetector:
     """Tests for CitationDetector."""
