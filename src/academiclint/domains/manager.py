@@ -40,21 +40,20 @@ class DomainManager:
         return domain
 
     def _load_builtin(self, name: str) -> dict:
-        """Load a built-in domain."""
+        """Load a built-in domain.
+
+        Raises:
+            FileNotFoundError: If the domain .yml file does not exist
+        """
         path = self._builtin_path / f"{name}.yml"
 
-        if path.exists():
-            return load_domain(path)
+        if not path.exists():
+            raise FileNotFoundError(
+                f"Built-in domain file not found: {path}. "
+                f"Valid built-in domains: {', '.join(sorted(self.BUILTIN_DOMAINS))}"
+            )
 
-        # Return minimal domain if file doesn't exist yet
-        return {
-            "name": name,
-            "description": f"Built-in {name} domain",
-            "technical_terms": [],
-            "domain_weasels": [],
-            "permitted_hedges": [],
-            "density_baseline": 0.50,
-        }
+        return load_domain(path)
 
     def list_domains(self) -> list[dict]:
         """List available domains.
