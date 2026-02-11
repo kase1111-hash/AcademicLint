@@ -426,66 +426,6 @@ class TestConfigurationSecurity:
 
 
 # =============================================================================
-# API Security Tests
-# =============================================================================
-
-class TestAPISecurity:
-    """Tests for API security (if FastAPI is available)."""
-
-    @pytest.fixture
-    def client(self):
-        """Create test client if FastAPI available."""
-        try:
-            from fastapi.testclient import TestClient
-            from academiclint.api.app import create_app
-            return TestClient(create_app())
-        except ImportError:
-            pytest.skip("FastAPI not installed")
-
-    def test_large_payload_rejected(self, client):
-        """Very large payloads should be handled safely."""
-        # 10MB payload
-        large_text = "a" * (10 * 1024 * 1024)
-
-        response = client.post("/check", json={"text": large_text})
-
-        # Should either reject or handle, not crash
-        assert response.status_code in [200, 400, 413, 422, 500]
-
-    def test_malformed_json_handled(self, client):
-        """Malformed JSON should be handled safely."""
-        response = client.post(
-            "/check",
-            content="not valid json",
-            headers={"Content-Type": "application/json"}
-        )
-
-        # Should return error, not crash
-        assert response.status_code in [400, 422]
-
-    def test_missing_required_fields(self, client):
-        """Missing required fields should return proper error."""
-        response = client.post("/check", json={})
-
-        # Should return validation error
-        assert response.status_code in [400, 422, 500]
-
-    def test_extra_fields_ignored(self, client):
-        """Extra fields in request should be safely ignored."""
-        response = client.post(
-            "/check",
-            json={
-                "text": "Test text.",
-                "malicious_field": "<script>alert('xss')</script>",
-                "__proto__": {"admin": True},
-            }
-        )
-
-        # Should process normally, ignoring extra fields
-        assert response.status_code == 200
-
-
-# =============================================================================
 # Output Security Tests
 # =============================================================================
 

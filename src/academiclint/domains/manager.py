@@ -12,14 +12,6 @@ class DomainManager:
     BUILTIN_DOMAINS = {
         "philosophy",
         "computer-science",
-        "medicine",
-        "law",
-        "history",
-        "psychology",
-        "economics",
-        "physics",
-        "biology",
-        "sociology",
     }
 
     def __init__(self):

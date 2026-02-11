@@ -77,11 +77,11 @@ class TestOutputConfig:
     def test_custom_output_config(self):
         """Test custom output configuration."""
         output = OutputConfig(
-            format="html",
+            format="json",
             color=False,
             show_suggestions=False,
             show_examples=False,
         )
-        assert output.format == "html"
+        assert output.format == "json"
         assert output.color is False
         assert output.show_suggestions is False

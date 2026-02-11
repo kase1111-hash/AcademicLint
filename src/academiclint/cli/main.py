@@ -26,7 +26,7 @@ def cli():
 @click.option(
     "--format",
     "output_format",
-    type=click.Choice(["terminal", "json", "html", "markdown", "github"]),
+    type=click.Choice(["terminal", "json", "markdown", "github"]),
     default="terminal",
     help="Output format",
 )
@@ -84,18 +84,6 @@ def setup(models, force, offline):
     from academiclint.cli.setup import run_setup
 
     run_setup(models=models, force=force, offline=offline)
-
-
-@cli.command()
-@click.option("--host", default="127.0.0.1", help="Host to bind to")
-@click.option("--port", default=8080, type=int, help="Port to bind to")
-@click.option("--reload", is_flag=True, help="Enable auto-reload for development")
-@click.option("--workers", default=1, type=int, help="Number of worker processes")
-def serve(host, port, reload, workers):
-    """Start REST API server."""
-    from academiclint.cli.serve import run_serve
-
-    run_serve(host=host, port=port, reload=reload, workers=workers)
 
 
 if __name__ == "__main__":

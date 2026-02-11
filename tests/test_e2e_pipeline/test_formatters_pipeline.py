@@ -13,7 +13,6 @@ from academiclint import Config, Linter, AnalysisResult
 from academiclint.formatters import (
     TerminalFormatter,
     JSONFormatter,
-    HTMLFormatter,
     MarkdownFormatter,
     GitHubFormatter,
 )
@@ -102,48 +101,6 @@ class TestJSONFormatterPipeline:
         # Indented JSON should have newlines
         assert "\n" in output
         assert "  " in output
-
-
-class TestHTMLFormatterPipeline:
-    """Test HTML formatter produces valid HTML."""
-
-    def test_html_output_valid(self, bad_result):
-        """HTML output should be valid HTML structure."""
-        formatter = HTMLFormatter()
-        output = formatter.format(bad_result)
-
-        # Should contain basic HTML structure
-        assert "<html" in output.lower() or "<!doctype" in output.lower() or "<div" in output.lower()
-
-    def test_html_contains_density(self, bad_result):
-        """HTML should contain density information."""
-        formatter = HTMLFormatter()
-        output = formatter.format(bad_result)
-
-        # Should mention density somewhere
-        assert "density" in output.lower() or str(bad_result.summary.density)[:4] in output
-
-    def test_html_contains_flags(self, bad_result):
-        """HTML should display flags."""
-        formatter = HTMLFormatter()
-        output = formatter.format(bad_result)
-
-        # Should contain flag information
-        if bad_result.summary.flag_count > 0:
-            # Should have some indication of issues
-            assert "flag" in output.lower() or "issue" in output.lower() or \
-                   bad_result.flags[0].term in output
-
-    def test_html_escapes_special_chars(self, linter):
-        """HTML should escape special characters."""
-        text_with_html = "The <script>alert('xss')</script> is problematic."
-        result = linter.check(text_with_html)
-
-        formatter = HTMLFormatter()
-        output = formatter.format(result)
-
-        # Script tags should be escaped
-        assert "<script>" not in output or "&lt;script&gt;" in output
 
 
 class TestMarkdownFormatterPipeline:
@@ -257,7 +214,6 @@ class TestFormatterConsistency:
         """All formatters should handle results with few/no flags."""
         formatters = [
             JSONFormatter(),
-            HTMLFormatter(),
             MarkdownFormatter(),
             TerminalFormatter(),
             GitHubFormatter(),
@@ -281,7 +237,6 @@ class TestFormatterConsistency:
 
         formatters = [
             JSONFormatter(),
-            HTMLFormatter(),
             MarkdownFormatter(),
             TerminalFormatter(),
             GitHubFormatter(),

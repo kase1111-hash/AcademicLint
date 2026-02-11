@@ -10,14 +10,14 @@ from academiclint.core.exceptions import ConfigurationError
 
 # Valid values for configuration options
 VALID_LEVELS = frozenset({"relaxed", "standard", "strict", "academic"})
-VALID_OUTPUT_FORMATS = frozenset({"terminal", "json", "html", "markdown", "github"})
+VALID_OUTPUT_FORMATS = frozenset({"terminal", "json", "markdown", "github"})
 
 
 @dataclass
 class OutputConfig:
     """Output configuration settings."""
 
-    format: str = "terminal"  # terminal, json, html, markdown, github
+    format: str = "terminal"  # terminal, json, markdown, github
     color: bool = True
     show_suggestions: bool = True
     show_examples: bool = True
