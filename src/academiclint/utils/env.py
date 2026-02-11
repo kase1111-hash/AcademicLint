@@ -313,7 +313,10 @@ def mask_secret(value: str, visible_chars: int = 4) -> str:
     Returns:
         Masked string (e.g., "****abcd")
     """
-    if len(value) <= visible_chars:
+    if visible_chars <= 0:
+        return "*" * len(value)
+
+    if len(value) < visible_chars:
         return "*" * len(value)
 
     masked_len = len(value) - visible_chars

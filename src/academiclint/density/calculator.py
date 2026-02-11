@@ -17,9 +17,14 @@ def calculate_density(
     """Calculate semantic density score for text.
 
     Components:
-    1. Content word ratio (0.4 weight)
-    2. Unique concept ratio (0.3 weight)
-    3. Precision penalty (0.3 weight)
+    1. Content word ratio (0.25 weight) — proportion of non-function words
+    2. Unique concept ratio (0.25 weight) — penalizes repetitive vocabulary
+    3. Specificity score (0.20 weight) — rewards numbers, proper nouns, technical terms
+    4. Precision (0.30 weight) — penalizes detected issues (flags)
+
+    The specificity component distinguishes precise academic writing (with
+    data, citations, specific nouns) from vague writing that uses many
+    content words but says little.
 
     Args:
         text: The text to analyze
@@ -65,14 +70,62 @@ def calculate_density(
         lemmas = [lemmatize(t) for t in content_words]
         unique_ratio = len(set(lemmas)) / len(lemmas) if lemmas else 0
 
-    # 3. Precision penalty (based on flags)
+    # 3. Specificity score — rewards concrete, precise language
+    specificity = _calculate_specificity(text, token_count)
+
+    # 4. Precision penalty (based on flags)
     flag_penalty = calculate_flag_penalty(flags, token_count)
     precision = 1.0 - flag_penalty
 
     # Weighted combination
-    density = 0.4 * content_ratio + 0.3 * unique_ratio + 0.3 * precision
+    density = (
+        0.25 * content_ratio
+        + 0.25 * unique_ratio
+        + 0.20 * specificity
+        + 0.30 * precision
+    )
 
     return min(1.0, max(0.0, density))
+
+
+def _calculate_specificity(text: str, token_count: int) -> float:
+    """Score how specific/concrete the text is.
+
+    Rewards:
+    - Numbers and percentages (quantitative claims)
+    - Parenthetical citations
+    - Capitalized multi-letter words mid-sentence (proper nouns, acronyms)
+    - Technical patterns (hyphenated compounds, slash-separated terms)
+
+    Returns:
+        Float between 0.0 and 1.0
+    """
+    if token_count == 0:
+        return 0.0
+
+    markers = 0
+
+    # Numbers: "42", "3.14", "1,003", "14.9%"
+    markers += len(re.findall(r"\b\d[\d,.]*%?\b", text))
+
+    # Parenthetical citations: (Author, 2020), (Author et al., 2020), [1]
+    markers += len(re.findall(r"\([A-Z][a-z]+.*?\d{4}\)", text))
+    markers += len(re.findall(r"\[\d+\]", text))
+
+    # Capitalized words mid-sentence (proper nouns, acronyms like "LIGO", "DMN")
+    # Exclude sentence-initial words
+    markers += len(re.findall(r"(?<=[.!?]\s)[^A-Z]*?\b([A-Z]{2,})\b", text))
+    markers += len(re.findall(r"\b[A-Z]{2,}\b", text))
+
+    # Technical compounds: "CRISPR-Cas9", "DMN-FPCN", "difference-in-differences"
+    markers += len(re.findall(r"\b\w+-\w+(?:-\w+)*\b", text))
+
+    # Comparison operators and statistical notation: "p < 0.001", "r = 0.31"
+    markers += len(re.findall(r"[<>=≤≥]\s*\d", text))
+
+    # Normalize: ~1 marker per 10 tokens = good specificity (1.0)
+    ratio = markers / (token_count / 10)
+    return min(1.0, ratio)
 
 
 def tokenize(text: str) -> list[str]:

@@ -73,6 +73,26 @@ class ProcessedDocument:
     filler_ratio: float = 0.0
     _spacy_doc: Optional[Any] = field(default=None, repr=False)
 
+    @property
+    def spacy_doc(self) -> Optional[Any]:
+        """Access the underlying spaCy Doc, if available."""
+        return self._spacy_doc
+
+    def get_sentence_for_span(self, start: int, end: int) -> Optional["Sentence"]:
+        """Find the sentence containing a character span.
+
+        Args:
+            start: Start character offset
+            end: End character offset
+
+        Returns:
+            The Sentence containing the span, or None
+        """
+        for sent in self.sentences:
+            if sent.span.start <= start and end <= sent.span.end:
+                return sent
+        return None
+
 
 class NLPPipeline:
     """Core NLP processing pipeline."""

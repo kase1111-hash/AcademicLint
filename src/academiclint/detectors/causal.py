@@ -25,8 +25,8 @@ class CausalDetector(Detector):
                 start = match.start()
                 end = match.end()
 
-                # Check if there's a citation nearby (uses base class method)
-                if self.has_nearby_citation(doc.text, end):
+                # Check if there's a citation in the same sentence
+                if self.has_citation_in_sentence(doc, start, end):
                     continue
 
                 term = doc.text[start:end]

@@ -89,19 +89,48 @@ class CircularDetector(Detector):
             word_root = self._get_root(word)
             if term_root == word_root or term_lower == word:
                 return True
+            # Prefix match: handles cases like justice/just, democracy/democr
+            if len(term_root) >= 4 and len(word_root) >= 4:
+                shorter, longer = sorted(
+                    [term_root, word_root], key=len
+                )
+                if longer.startswith(shorter):
+                    return True
 
         return False
 
     def _get_root(self, word: str) -> str:
-        """Get a simple root form of a word."""
-        # Simple stemming - remove common suffixes
-        suffixes = ["ness", "ment", "tion", "sion", "ing", "ed", "er", "est", "ly", "ity", "dom"]
+        """Get a simple root form of a word.
 
-        for suffix in suffixes:
-            if word.endswith(suffix) and len(word) > len(suffix) + 2:
-                return word[: -len(suffix)]
+        Applies longest-suffix-first stripping with recursive passes
+        to handle compound suffixes like "ization" → "ize" → root.
+        """
+        # Ordered longest-first so "ization" matches before "tion"
+        suffixes = [
+            "ization", "isation", "ological", "ically",
+            "ation", "ition", "ness", "ment", "tion", "sion",
+            "ible", "able", "ical", "atic", "ious", "eous",
+            "ive", "ity", "dom", "ism", "ist", "ful",
+            "ing", "ed", "er", "est", "ly", "al", "ic",
+        ]
 
-        return word
+        root = word
+        changed = True
+        while changed:
+            changed = False
+            for suffix in suffixes:
+                if root.endswith(suffix) and len(root) > len(suffix) + 2:
+                    root = root[: -len(suffix)]
+                    changed = True
+                    break  # restart from longest suffix
+
+        # Normalize trailing 'e' variants: "educate" / "educat" → same root
+        if root.endswith("e") and len(root) > 3:
+            root_no_e = root[:-1]
+            # Keep the shorter form as canonical
+            root = root_no_e
+
+        return root
 
     def _get_example(self, term: str) -> str:
         """Get example of non-circular definition."""
