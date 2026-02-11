@@ -46,10 +46,6 @@ api = [
     "fastapi>=0.100.0",
     "uvicorn[standard]>=0.23.0",
 ]
-transformers = [
-    "sentence-transformers>=2.2.0",
-    "torch>=2.0.0",
-]
 dev = [
     "pytest>=7.0.0",
     "pytest-cov>=4.0.0",
@@ -62,7 +58,7 @@ dev = [
     "types-PyYAML>=6.0.0",
 ]
 all = [
-    "academiclint[api,transformers,dev]",
+    "academiclint[api,dev]",
 ]
 
 [project.scripts]
@@ -106,10 +102,6 @@ exclude = ["tests/", "docs/"]
 
 [[tool.mypy.overrides]]
 module = "spacy.*"
-ignore_missing_imports = true
-
-[[tool.mypy.overrides]]
-module = "sentry_sdk.*"
 ignore_missing_imports = true
 
 [tool.ruff]

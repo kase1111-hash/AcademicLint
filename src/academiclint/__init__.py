@@ -4,13 +4,6 @@ Grammarly checks your spelling. AcademicLint checks your thinking.
 """
 
 from academiclint.core.config import Config, OutputConfig
-from academiclint.core.environments import (
-    Environment,
-    EnvironmentConfig,
-    get_config,
-    get_environment,
-    get_environment_config,
-)
 from academiclint.core.linter import Linter
 from academiclint.core.result import (
     AnalysisResult,
@@ -28,12 +21,6 @@ __all__ = [
     "Linter",
     "Config",
     "OutputConfig",
-    # Environment
-    "Environment",
-    "EnvironmentConfig",
-    "get_environment",
-    "get_environment_config",
-    "get_config",
     # Results
     "AnalysisResult",
     "ParagraphResult",

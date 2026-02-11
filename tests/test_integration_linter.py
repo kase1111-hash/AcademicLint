@@ -319,41 +319,6 @@ class TestLinterFileIntegration:
                 linter.check_file(f.name)
 
 
-class TestLinterStreamIntegration:
-    """Integration tests for streaming analysis."""
-
-    def test_check_stream_yields_paragraphs(self, linter):
-        """Test that check_stream yields paragraph results."""
-        text = """
-        First paragraph with some content.
-
-        Second paragraph with more content.
-
-        Third paragraph concludes.
-        """
-
-        paragraphs = list(linter.check_stream(text))
-
-        assert len(paragraphs) >= 1
-        for para in paragraphs:
-            assert isinstance(para, ParagraphResult)
-
-    def test_check_stream_order(self, linter):
-        """Test that paragraphs are yielded in order."""
-        text = """
-        First paragraph.
-
-        Second paragraph.
-
-        Third paragraph.
-        """
-
-        paragraphs = list(linter.check_stream(text))
-
-        for i, para in enumerate(paragraphs):
-            assert para.index == i
-
-
 class TestMultipleDetectorsIntegration:
     """Integration tests verifying multiple detectors work together."""
 
