@@ -91,17 +91,14 @@ academiclint setup
 
 ### Can I use AcademicLint offline?
 
-Yes. After the initial model download, AcademicLint runs entirely offline in local mode:
+Yes. After the initial model download, AcademicLint runs entirely offline. All processing happens locally on your machine — no network connection is required after setup.
 
 ```bash
-academiclint --offline check paper.md
-```
+# Download models once
+academiclint setup
 
-Or in configuration:
-```yaml
-# .academiclint.yml
-network:
-  offline_mode: true
+# Then use normally — no internet needed
+academiclint check paper.md
 ```
 
 ### How do I verify the installation?
@@ -122,8 +119,6 @@ academiclint check --help
 | Plain text | `.txt` | ✅ Full |
 | Markdown | `.md` | ✅ Full |
 | LaTeX | `.tex` | ✅ Full (math ignored) |
-| Word | `.docx` | ✅ Via conversion |
-| PDF | `.pdf` | ⚠️ Experimental |
 
 ### How do I analyze a file?
 
@@ -173,21 +168,18 @@ output:
 
 ### Can I ignore specific rules or flags?
 
-Yes. Use inline comments in your text:
-
-```markdown
-<!-- academiclint-disable WEASEL -->
-Some researchers suggest that...
-<!-- academiclint-enable WEASEL -->
-```
-
-Or configure globally:
+You can reduce false positives by adjusting the strictness level or adding domain-specific terms:
 
 ```yaml
 # .academiclint.yml
-disabled_rules:
-  - WEASEL
-  - HEDGE_STACK
+level: relaxed                 # Less aggressive flagging
+domain_terms:
+  - your_technical_term        # Won't be flagged as jargon
+```
+
+Or use a built-in domain:
+```bash
+academiclint check paper.md --domain philosophy
 ```
 
 ### How do I analyze text from stdin?
@@ -331,14 +323,11 @@ technical_terms:
 
 ### How do I use AcademicLint in VS Code?
 
-1. Install the extension: `code --install-extension academiclint.academiclint`
-2. Or search "AcademicLint" in the marketplace
+A VS Code extension is planned for a future release (v0.2). In the meantime, you can run AcademicLint from the VS Code integrated terminal:
 
-Features:
-- Real-time underlining
-- Hover explanations
-- Quick-fix suggestions
-- Density score in status bar
+```bash
+academiclint check paper.md
+```
 
 ### How do I use AcademicLint in CI/CD?
 
@@ -367,22 +356,14 @@ repos:
 
 ### Is there a REST API?
 
-Yes. Start the local server:
-
-```bash
-academiclint serve --port 8080
-```
-
-Or use the hosted API (requires API key):
+A REST API server is planned for a future release (v0.2). Currently, you can use the Python library for programmatic access:
 
 ```python
-import requests
+from academiclint import Linter
 
-response = requests.post(
-    "https://api.academiclint.dev/v1/check",
-    headers={"Authorization": "Bearer YOUR_KEY"},
-    json={"text": "Your text here..."}
-)
+linter = Linter()
+result = linter.check("Your text here...")
+print(f"Density: {result.density}")
 ```
 
 ---
@@ -401,19 +382,9 @@ See our [Privacy Policy](../PRIVACY.md) for details. In short:
 - No training on user data
 - Minimal logging (no text content)
 
-### Can I self-host AcademicLint?
-
-Yes:
-
-```bash
-docker run -p 8080:8080 academiclint/server:latest
-```
-
-See the [Self-Hosting Guide](./self-hosting.md) for Kubernetes deployment.
-
 ### Is AcademicLint GDPR compliant?
 
-Yes. Local mode keeps all data on your machine. API mode is designed for GDPR compliance with no data retention.
+Yes. AcademicLint runs entirely on your local machine — no data is sent anywhere. All processing is local.
 
 ---
 
@@ -473,7 +444,7 @@ pip install --user academiclint
 
 ## Still Have Questions?
 
-- **Documentation:** [docs.academiclint.dev](https://docs.academiclint.dev)
+- **Documentation:** See the [`docs/`](.) directory
 - **GitHub Issues:** [Report a bug or request a feature](https://github.com/kase1111-hash/academiclint/issues)
 - **Discussions:** [Ask questions and share ideas](https://github.com/kase1111-hash/academiclint/discussions)
 - **Email:** kase1111@gmail.com

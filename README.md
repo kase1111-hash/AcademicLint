@@ -84,17 +84,20 @@ PARAGRAPH 3, LINE 47:
 
 - **Terminal** — Color-coded inline annotations
 - **JSON** — Structured output for CI/CD integration
-- **HTML** — Visual report with highlighted passages
 - **Markdown** — Annotated version of original document
-- **LSP** — Language Server Protocol for editor integration
+- **GitHub** — GitHub Actions annotations format
 
 ### Integrations
 
+- **GitHub Actions** — Automated PR checks for documentation
+- **Pre-commit Hook** — Lint on commit
+
+### Planned Integrations
+
 - **VS Code Extension** — Real-time underlining as you write
 - **Obsidian Plugin** — For markdown-based academic workflows
-- **Google Docs Add-on** — One-click analysis (coming soon)
-- **Overleaf/LaTeX** — Pre-submission checks (coming soon)
-- **GitHub Actions** — Automated PR checks for documentation
+- **Google Docs Add-on** — One-click analysis
+- **Overleaf/LaTeX** — Pre-submission checks
 
 ---
 
@@ -110,7 +113,7 @@ pip install academiclint
 pipx install academiclint
 
 # From source
-git clone https://github.com/yourusername/academiclint.git
+git clone https://github.com/kase1111-hash/academiclint.git
 cd academiclint
 pip install -e .
 ```
@@ -118,7 +121,7 @@ pip install -e .
 ### Requirements
 
 - Python 3.11+
-- ~2GB disk space (for language models)
+- ~1.5GB disk space (for language models)
 - Internet connection for first run (downloads models)
 
 ### First Run
@@ -393,39 +396,10 @@ for flag in result.flags:
     print(f"    Line {flag.line}: {flag.context}")
     print(f"    Suggestion: {flag.suggestion}")
 
-# Get summary statistics
-stats = result.summary()
-print(f"Total words: {stats.word_count}")
-print(f"Unique concepts: {stats.concept_count}")
-print(f"Filler ratio: {stats.filler_ratio:.1%}")
-```
-
-### REST API
-
-```bash
-# Start local server
-academiclint serve --port 8080
-
-# Or use hosted API (requires API key)
-export ACADEMICLINT_API_KEY=your_key_here
-```
-
-```python
-import requests
-
-response = requests.post(
-    "https://api.academiclint.dev/v1/check",
-    headers={"Authorization": "Bearer YOUR_API_KEY"},
-    json={
-        "text": "Your academic text here...",
-        "config": {
-            "level": "standard",
-            "format": "json"
-        }
-    }
-)
-
-result = response.json()
+# Access summary statistics
+print(f"Total words: {result.summary.word_count}")
+print(f"Unique concepts: {result.summary.concept_count}")
+print(f"Filler ratio: {result.summary.filler_ratio:.1%}")
 ```
 
 ### API Response Schema
@@ -516,7 +490,7 @@ jobs:
 ```yaml
 # .pre-commit-config.yaml
 repos:
-  - repo: https://github.com/yourusername/academiclint
+  - repo: https://github.com/kase1111-hash/academiclint
     rev: v0.1.0
     hooks:
       - id: academiclint
@@ -526,59 +500,15 @@ repos:
 
 ---
 
-## Editor Integration
+## Editor Integration (Planned)
 
-### VS Code
+Editor integrations are on the roadmap for v0.2. Planned features include:
 
-Install from marketplace: `AcademicLint`
+- **VS Code Extension** — Real-time underlining, hover explanations, density in status bar
+- **Obsidian Plugin** — Ribbon icon, reading view annotations, concept density graph
+- **Vim/Neovim** — ALE and null-ls integration
 
-Or install manually:
-```bash
-code --install-extension academiclint.academiclint
-```
-
-Features:
-- Real-time underlining of flagged passages
-- Hover for explanations and suggestions
-- Quick-fix actions for common issues
-- Density score in status bar
-- Document heat map (View → AcademicLint Heat Map)
-
-**Settings (settings.json):**
-```json
-{
-  "academiclint.level": "standard",
-  "academiclint.minDensity": 0.5,
-  "academiclint.showInlineHints": true,
-  "academiclint.domainTermsFile": ".academiclint-terms.txt"
-}
-```
-
-### Obsidian
-
-Install via Community Plugins: search "AcademicLint"
-
-Features:
-- Ribbon icon for one-click analysis
-- Reading view annotations
-- Daily notes integration (track clarity over time)
-- Graph view: concept density by note
-
-### Vim/Neovim
-
-Via ALE:
-```vim
-let g:ale_linters = {'markdown': ['academiclint']}
-```
-
-Via null-ls (Neovim):
-```lua
-require("null-ls").setup({
-  sources = {
-    require("null-ls").builtins.diagnostics.academiclint,
-  },
-})
-```
+In the meantime, you can use AcademicLint via the CLI or integrate it into your editor's terminal.
 
 ---
 
@@ -695,23 +625,7 @@ Note: Lower density isn't always worse—some fields value nuance and hedging mo
 - Models downloaded once, run locally
 - Zero telemetry
 
-### API Mode (Optional)
-
-- Text sent to our servers for processing
-- Not stored beyond request lifetime
-- Not used for training
-- SOC 2 Type II compliant (certification pending)
-- See [Privacy Policy](./PRIVACY.md)
-
-### Self-Hosted API
-
-For institutions wanting central deployment:
-
-```bash
-docker run -p 8080:8080 academiclint/server:latest
-```
-
-See [Self-Hosting Guide](./docs/self-hosting.md) for Kubernetes deployment.
+See [Privacy Policy](./PRIVACY.md) for full details.
 
 ---
 
@@ -721,14 +635,15 @@ See [Self-Hosting Guide](./docs/self-hosting.md) for Kubernetes deployment.
 - [x] Core analysis engine
 - [x] CLI tool
 - [x] Python library
-- [x] JSON/HTML/Markdown output
+- [x] Terminal/JSON/Markdown/GitHub output formats
 - [x] Basic domain customization
+- [x] GitHub Actions integration
 
 ### v0.2
 - [ ] VS Code extension
 - [ ] Obsidian plugin
-- [ ] REST API
-- [ ] GitHub Actions integration
+- [ ] REST API server (`academiclint serve`)
+- [ ] HTML output format
 
 ### v0.3
 - [ ] Google Docs add-on
@@ -763,7 +678,7 @@ We welcome contributions! See [CONTRIBUTING.md](./CONTRIBUTING.md) for guideline
 ### Development Setup
 
 ```bash
-git clone https://github.com/yourusername/academiclint.git
+git clone https://github.com/kase1111-hash/academiclint.git
 cd academiclint
 python -m venv venv
 source venv/bin/activate
@@ -803,7 +718,7 @@ Not by default. Local mode processes everything on your machine. Cloud API is op
 
 ## Support
 
-- **Documentation**: [docs.academiclint.dev](https://docs.academiclint.dev)
+- **Documentation**: See the [`docs/`](./docs/) directory
 - **Issues**: [GitHub Issues](https://github.com/kase1111-hash/academiclint/issues)
 - **Discussions**: [GitHub Discussions](https://github.com/kase1111-hash/academiclint/discussions)
 - **Email**: kase1111@gmail.com

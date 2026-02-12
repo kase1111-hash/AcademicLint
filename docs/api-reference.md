@@ -1,18 +1,5 @@
 # API Reference
 
-## Interactive API Documentation
-
-AcademicLint provides interactive API documentation via Swagger UI and ReDoc when the server is running:
-
-- **Swagger UI**: `http://localhost:8080/v1/docs` - Interactive API explorer
-- **ReDoc**: `http://localhost:8080/v1/redoc` - Beautiful API documentation
-- **OpenAPI JSON**: `http://localhost:8080/v1/openapi.json` - Raw OpenAPI schema
-
-### Additional Resources
-
-- [OpenAPI Specification](./openapi.yaml) - Complete OpenAPI 3.1.0 specification
-- [Postman Collection](./postman_collection.json) - Import into Postman for easy testing
-
 ## Python Library
 
 ### Linter
@@ -55,15 +42,6 @@ Analyze multiple files.
 
 ```python
 results = linter.check_files([Path("ch1.md"), Path("ch2.md")])
-```
-
-##### `check_stream(text: str) -> Iterator[ParagraphResult]`
-
-Stream analysis paragraph by paragraph.
-
-```python
-for para in linter.check_stream(text):
-    print(f"Paragraph {para.index}: {para.density}")
 ```
 
 ### AnalysisResult
@@ -123,102 +101,6 @@ FlagType.CITATION_NEEDED   # Missing citations
 FlagType.FILLER            # Empty phrases
 ```
 
-## REST API
+## REST API (Planned)
 
-### Endpoints
-
-#### POST /v1/check
-
-Analyze text for semantic clarity issues.
-
-**Request:**
-
-```json
-{
-  "text": "Your academic text here...",
-  "config": {
-    "level": "standard",
-    "min_density": 0.5,
-    "domain": "philosophy",
-    "domain_terms": ["additional", "terms"]
-  }
-}
-```
-
-**Response:**
-
-```json
-{
-  "id": "check_abc123",
-  "created_at": "2025-01-11T10:30:00Z",
-  "input_length": 1547,
-  "processing_time_ms": 234,
-  "summary": {
-    "density": 0.43,
-    "density_grade": "thin",
-    "flag_count": 12,
-    "word_count": 287
-  },
-  "paragraphs": [...],
-  "overall_suggestions": [...]
-}
-```
-
-#### GET /v1/health
-
-Health check endpoint.
-
-**Response:**
-
-```json
-{
-  "status": "healthy",
-  "version": "0.1.0",
-  "models_loaded": true
-}
-```
-
-#### GET /v1/domains
-
-List available domains.
-
-**Response:**
-
-```json
-{
-  "domains": [
-    {"name": "philosophy", "term_count": 50},
-    {"name": "computer-science", "term_count": 80}
-  ]
-}
-```
-
-### Starting the Server
-
-```bash
-# Start local server
-academiclint serve --port 8080
-
-# With auto-reload for development
-academiclint serve --reload
-
-# With multiple workers
-academiclint serve --workers 4
-```
-
-### Using the API
-
-```python
-import requests
-
-response = requests.post(
-    "http://localhost:8080/v1/check",
-    json={
-        "text": "Your text here...",
-        "config": {"level": "standard"}
-    }
-)
-
-result = response.json()
-print(f"Density: {result['summary']['density']}")
-```
+A REST API server (`academiclint serve`) is planned for a future release. It will provide HTTP endpoints for text analysis using FastAPI. See the [project roadmap](../README.md#roadmap) for details.
