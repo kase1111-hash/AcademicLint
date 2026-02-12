@@ -151,13 +151,6 @@ MemoryError: Unable to allocate memory
    academiclint check paper.md --sections "methods"
    ```
 
-3. **Reduce batch size:**
-   ```yaml
-   # .academiclint.yml
-   performance:
-     batch_size: 1000  # Default is 5000
-   ```
-
 ### "spaCy model not found"
 
 **Symptom:**
@@ -217,17 +210,9 @@ ModuleNotFoundError: No module named 'academiclint'
    academiclint check paper.md --level relaxed
    ```
 
-3. **Disable unnecessary detectors:**
-   ```yaml
-   # .academiclint.yml
-   disabled_rules:
-     - JARGON_DENSE  # Expensive computation
-   ```
-
-4. **Use API for large documents:**
+3. **Use a lower strictness level:**
    ```bash
-   academiclint serve &
-   curl -X POST http://localhost:8080/v1/check -d '{"text": "..."}'
+   academiclint check paper.md --level relaxed
    ```
 
 ### High memory usage
@@ -243,22 +228,9 @@ ModuleNotFoundError: No module named 'academiclint'
    for f in *.md; do academiclint check "$f"; done
    ```
 
-2. **Adjust memory limits:**
-   ```yaml
-   # .academiclint.yml
-   performance:
-     max_memory_mb: 2048
-   ```
-
 ### CPU usage at 100%
 
-This is normal during analysis. AcademicLint uses all available cores. To limit:
-
-```yaml
-# .academiclint.yml
-performance:
-  max_workers: 2  # Limit parallel processing
-```
+This is normal during analysis. NLP processing is CPU-intensive. Analyzing smaller sections can help reduce load.
 
 ---
 
@@ -286,13 +258,6 @@ performance:
    academiclint check paper.md --domain philosophy
    ```
 
-4. **Disable specific rules:**
-   ```yaml
-   # .academiclint.yml
-   disabled_rules:
-     - WEASEL
-   ```
-
 ### Not catching obvious issues
 
 **Solutions:**
@@ -308,10 +273,9 @@ performance:
    min_density: 0.40
    ```
 
-3. **Ensure all detectors enabled:**
-   ```yaml
-   # .academiclint.yml
-   disabled_rules: []  # Empty = all enabled
+3. **Verify models are installed:**
+   ```bash
+   academiclint setup
    ```
 
 ### Incorrect line numbers
@@ -341,41 +305,17 @@ performance:
    academiclint check paper.txt
    ```
 
-2. **Configure LaTeX handling:**
+2. **Use ignore patterns for LaTeX-specific content:**
    ```yaml
    # .academiclint.yml
-   latex:
-     ignore_math: true
-     ignore_commands:
-       - cite
-       - ref
+   ignore_patterns:
+     - "^\\\\begin"
+     - "^\\\\end"
    ```
 
 ---
 
 ## Integration Problems
-
-### VS Code extension not working
-
-**Solutions:**
-
-1. **Verify installation:**
-   - Open VS Code Extensions panel
-   - Search for "AcademicLint"
-   - Ensure it's installed and enabled
-
-2. **Check output panel:**
-   - View → Output → Select "AcademicLint"
-   - Look for error messages
-
-3. **Verify CLI works:**
-   ```bash
-   academiclint --version
-   ```
-
-4. **Reload VS Code:**
-   - Command Palette (Ctrl/Cmd + Shift + P)
-   - "Developer: Reload Window"
 
 ### GitHub Actions failing
 
@@ -423,92 +363,6 @@ performance:
 3. **Skip in CI:**
    ```bash
    SKIP=academiclint git commit -m "Quick fix"
-   ```
-
----
-
-## API Issues
-
-### "Connection refused"
-
-**Symptom:**
-```
-ConnectionRefusedError: [Errno 111] Connection refused
-```
-
-**Solutions:**
-
-1. **Start the server:**
-   ```bash
-   academiclint serve --port 8080
-   ```
-
-2. **Check port availability:**
-   ```bash
-   lsof -i :8080  # Linux/macOS
-   netstat -an | findstr 8080  # Windows
-   ```
-
-3. **Use correct URL:**
-   ```
-   http://localhost:8080/v1/check  # Not https
-   ```
-
-### "401 Unauthorized"
-
-**Symptom:**
-```json
-{"error": "Invalid or missing API key"}
-```
-
-**Solutions:**
-
-1. **Set API key:**
-   ```bash
-   export ACADEMICLINT_API_KEY=your_key
-   ```
-
-2. **Include in request:**
-   ```bash
-   curl -H "Authorization: Bearer YOUR_KEY" ...
-   ```
-
-### "413 Request Entity Too Large"
-
-**Symptom:**
-```json
-{"error": "Request body too large"}
-```
-
-**Solution:**
-The default limit is 1MB. For larger texts:
-
-1. **Split into chunks**
-2. **Increase limit (self-hosted):**
-   ```bash
-   academiclint serve --max-body-size 10485760  # 10MB
-   ```
-
-### Rate limiting
-
-**Symptom:**
-```json
-{"error": "Rate limit exceeded", "retry_after": 60}
-```
-
-**Solutions:**
-
-1. **Wait and retry:**
-   ```python
-   import time
-   time.sleep(response.headers['Retry-After'])
-   ```
-
-2. **Batch requests:**
-   ```python
-   # Instead of many small requests
-   texts = ["...", "...", "..."]
-   result = client.check_batch(texts)
    ```
 
 ---
@@ -607,7 +461,7 @@ python --version
 
 ### Getting support
 
-- **Documentation:** [docs.academiclint.dev](https://docs.academiclint.dev)
+- **Documentation:** See the [`docs/`](.) directory
 - **GitHub Issues:** [Report bugs](https://github.com/kase1111-hash/academiclint/issues)
 - **Discussions:** [Ask questions](https://github.com/kase1111-hash/academiclint/discussions)
 - **Email:** kase1111@gmail.com
@@ -624,8 +478,7 @@ python --version
 | Too many flags | Add terms to `domain_terms` |
 | Not enough flags | `--level strict` |
 | Memory error | Analyze in sections |
-| VS Code not working | Reload window |
-| API unauthorized | Check API key in header |
+| spaCy model missing | `python -m spacy download en_core_web_lg` |
 
 ---
 

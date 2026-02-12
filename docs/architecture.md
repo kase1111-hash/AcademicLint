@@ -9,12 +9,12 @@ This document describes the architecture of AcademicLint, a semantic clarity ana
 │                              AcademicLint                                    │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                              │
-│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐                   │
-│  │     CLI      │    │   REST API   │    │ Python SDK   │   Entry Points    │
-│  │  (Click)     │    │  (FastAPI)   │    │   (Import)   │                   │
-│  └──────┬───────┘    └──────┬───────┘    └──────┬───────┘                   │
-│         │                   │                   │                            │
-│         └───────────────────┼───────────────────┘                            │
+│  ┌──────────────┐                         ┌──────────────┐                   │
+│  │     CLI      │                         │ Python SDK   │   Entry Points    │
+│  │  (Click)     │                         │   (Import)   │                   │
+│  └──────┬───────┘                         └──────┬───────┘                   │
+│         │                                        │                            │
+│         └────────────────────────────────────────┘                            │
 │                             ▼                                                │
 │                   ┌─────────────────┐                                        │
 │                   │     Linter      │              Core Engine               │
@@ -46,7 +46,7 @@ This document describes the architecture of AcademicLint, a semantic clarity ana
 │                              ┌─────────────────────┐                         │
 │                              │     Formatters      │                         │
 │                              ├──────┬──────┬───────┤                         │
-│                              │ JSON │ HTML │Terminal│                        │
+│                              │ JSON │  MD  │Terminal│                        │
 │                              └──────┴──────┴───────┘                         │
 │                                                                              │
 └─────────────────────────────────────────────────────────────────────────────┘
@@ -66,13 +66,13 @@ This document describes the architecture of AcademicLint, a semantic clarity ana
 │ • cli/          │     │ • core/         │     │ • formatters/   │
 │   - main.py     │────▶│   - linter.py   │────▶│   - terminal.py │
 │   - check.py    │     │   - config.py   │     │   - json_.py    │
-│   - setup.py    │     │   - result.py   │     │   - html.py     │
-│   - serve.py    │     │   - parser.py   │     │   - markdown.py │
-│                 │     │   - pipeline.py │     │   - github.py   │
-│ • api/          │     │   - exceptions.py     │                 │
-│   - app.py      │     │   - environments.py   └─────────────────┘
-│   - routes.py   │     │                 │
-│   - schemas.py  │     └────────┬────────┘
+│   - setup.py    │     │   - result.py   │     │   - markdown.py │
+│                 │     │   - parser.py   │     │   - github.py   │
+│                 │     │   - pipeline.py │     │                 │
+│                 │     │   - exceptions.py     └─────────────────┘
+│                 │     │   - environments.py
+│                 │     │                 │
+│                 │     └────────┬────────┘
 │                 │              │
 └─────────────────┘              ▼
                        ┌─────────────────┐     ┌─────────────────┐
@@ -214,55 +214,6 @@ This document describes the architecture of AcademicLint, a semantic clarity ana
                         OUTPUT
 ```
 
-## API Request Flow
-
-```
-┌──────────────────────────────────────────────────────────────────────────┐
-│                         REST API Request Flow                             │
-└──────────────────────────────────────────────────────────────────────────┘
-
-  Client                    FastAPI                      Core
-    │                          │                          │
-    │  POST /v1/check          │                          │
-    │  {text, config}          │                          │
-    │─────────────────────────▶│                          │
-    │                          │                          │
-    │                          │  Validate Request        │
-    │                          │  (Pydantic Schemas)      │
-    │                          │                          │
-    │                          │  Create Config           │
-    │                          │─────────────────────────▶│
-    │                          │                          │
-    │                          │  Initialize Linter       │
-    │                          │─────────────────────────▶│
-    │                          │                          │
-    │                          │  linter.check(text)      │
-    │                          │─────────────────────────▶│
-    │                          │                          │
-    │                          │      Parse Document      │
-    │                          │      ◄──────────────────▶│
-    │                          │                          │
-    │                          │      Run NLP Pipeline    │
-    │                          │      ◄──────────────────▶│
-    │                          │                          │
-    │                          │      Execute Detectors   │
-    │                          │      ◄──────────────────▶│
-    │                          │                          │
-    │                          │      Calculate Density   │
-    │                          │      ◄──────────────────▶│
-    │                          │                          │
-    │                          │      Build Result        │
-    │                          │◀─────────────────────────│
-    │                          │                          │
-    │                          │  Convert to Response     │
-    │                          │  (CheckResponse)         │
-    │                          │                          │
-    │  200 OK                  │                          │
-    │  {id, summary, ...}      │                          │
-    │◀─────────────────────────│                          │
-    │                          │                          │
-```
-
 ## Detector Pipeline
 
 ```
@@ -368,21 +319,21 @@ This document describes the architecture of AcademicLint, a semantic clarity ana
                   │    Calculate    │
                   │                 │
                   │ density =       │
-                  │ concepts        │
-                  │ ─────────────   │
-                  │ total - filler  │
-                  │                 │
+                  │ 0.25*content    │
+                  │ + 0.25*unique   │
+                  │ + 0.20*specific │
+                  │ + 0.30*precision│
                   └────────┬────────┘
                            │
                            ▼
                   ┌─────────────────┐
                   │  Density Grade  │
                   │                 │
-                  │ < 0.30: vapor   │
-                  │ < 0.50: thin    │
-                  │ < 0.70: adequate│
-                  │ < 0.85: dense   │
-                  │ ≥ 0.85: crystal │
+                  │ < 0.20: vapor   │
+                  │ < 0.40: thin    │
+                  │ < 0.60: adequate│
+                  │ < 0.80: dense   │
+                  │ ≥ 0.80: crystal │
                   └─────────────────┘
 ```
 
@@ -395,13 +346,7 @@ This document describes the architecture of AcademicLint, a semantic clarity ana
 └──────────────────────────────────────────────────────────────────────────┘
 
                     ┌─────────────────────┐
-                    │   API Request       │  ◀── Highest Priority
-                    │   Parameters        │
-                    └──────────┬──────────┘
-                               │
-                               ▼
-                    ┌─────────────────────┐
-                    │   CLI Arguments     │
+                    │   CLI Arguments     │  ◀── Highest Priority
                     │   (--level, etc.)   │
                     └──────────┬──────────┘
                                │
@@ -467,16 +412,10 @@ academiclint/
 ├── __main__.py              # Module entry point
 ├── version.py               # Version management
 │
-├── api/                     # REST API (FastAPI)
-│   ├── app.py              # Application factory
-│   ├── routes.py           # Endpoint definitions
-│   └── schemas.py          # Request/response models
-│
 ├── cli/                     # Command-line interface
 │   ├── main.py             # CLI entry point
 │   ├── check.py            # Check command
-│   ├── setup.py            # Setup command
-│   └── serve.py            # Server command
+│   └── setup.py            # Setup command
 │
 ├── core/                    # Core analysis engine
 │   ├── linter.py           # Main Linter class
@@ -498,11 +437,10 @@ academiclint/
 │   ├── citation.py         # CITATION_NEEDED
 │   └── filler.py           # FILLER
 │
-├── formatters/              # Output formatters (5)
+├── formatters/              # Output formatters (4)
 │   ├── base.py             # Abstract base class
 │   ├── terminal.py         # Console output
 │   ├── json_.py            # JSON output
-│   ├── html.py             # HTML reports
 │   ├── markdown.py         # Markdown output
 │   └── github.py           # GitHub Actions
 │

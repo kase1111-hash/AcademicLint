@@ -228,7 +228,7 @@ class TestLinter:
 ### Test Requirements
 
 - All new features must have tests
-- Maintain >80% code coverage
+- Maintain ≥70% code coverage
 - Tests must pass before merging
 
 Run tests:

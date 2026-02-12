@@ -35,7 +35,7 @@ sections: null  # or ["introduction", "conclusion", "discussion"]
 
 # Output settings
 output:
-  format: terminal        # terminal, json, html, markdown, github
+  format: terminal        # terminal, json, markdown, github
   color: true
   show_suggestions: true
   show_examples: true
@@ -59,9 +59,10 @@ fail_under: null          # Exit with error if density below this
 |----------|-------------|
 | `ACADEMICLINT_LEVEL` | Default strictness level |
 | `ACADEMICLINT_MIN_DENSITY` | Default minimum density |
-| `ACADEMICLINT_CONFIG` | Path to config file |
-| `ACADEMICLINT_NO_COLOR` | Disable colored output |
-| `ACADEMICLINT_CACHE_DIR` | Model cache directory |
+| `ACADEMICLINT_FAIL_UNDER` | Fail threshold (0.0-1.0) |
+| `ACADEMICLINT_DOMAIN` | Domain name for specialized analysis |
+| `ACADEMICLINT_OUTPUT_FORMAT` | Output format (terminal, json, markdown, github) |
+| `ACADEMICLINT_COLOR` | Enable colored output (true/false) |
 
 ## Configuration Precedence
 
