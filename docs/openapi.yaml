@@ -28,13 +28,15 @@ info:
 
     ### Authentication
 
-    Currently, the API does not require authentication. For production deployments,
-    consider adding API key authentication via a reverse proxy.
+    **Pre-production requirement:** API key authentication must be configured before
+    any production deployment. Use header-based API key auth or a reverse proxy.
+    See the `api.require_auth` configuration option.
 
     ### Rate Limiting
 
-    No rate limiting is enforced by default. Configure rate limiting at the
-    infrastructure level for production use.
+    **Pre-production requirement:** Rate limiting must be enabled before production
+    deployment. Configure via `api.rate_limit_per_minute` or at the infrastructure level.
+    CORS is deny-all by default (empty `cors_origins` list); add explicit origins as needed.
   version: 1.0.0
   contact:
     name: AcademicLint Support
@@ -285,7 +287,19 @@ paths:
                     term_count: 130
                     description: Social theory and methodology terms
 
+security:
+  - ApiKeyAuth: []
+
 components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: |
+        API key for authenticating requests. Required for production deployments.
+        Disabled by default in development (set `api.require_auth: true` in config).
+
   schemas:
     ConfigSchema:
       type: object

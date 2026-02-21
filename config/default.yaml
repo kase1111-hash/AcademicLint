@@ -31,12 +31,14 @@ output:
 
 # API server settings
 api:
-  host: "0.0.0.0"
+  host: "127.0.0.1"
   port: 8080
   workers: 1
   reload: false
   debug: false
-  cors_origins: []
+  cors_origins: []  # Empty list = deny all origins. Add explicit origins for CORS access.
+  require_auth: false  # Set to true for production — requires X-API-Key header
+  rate_limit_per_minute: 0  # 0 = disabled. Set to a positive integer for production.
 
 # Performance settings
 performance:

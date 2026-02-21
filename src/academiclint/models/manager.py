@@ -1,7 +1,15 @@
 """Model download and management for AcademicLint."""
 
+import re
+import subprocess
 from pathlib import Path
 from typing import Optional
+
+# Strict allowlist for spaCy model names: language_core_web_size
+VALID_MODEL_PATTERN = re.compile(r"^[a-z]{2}_core_web_(sm|md|lg|trf)$")
+
+# Timeout for model download subprocess (5 minutes)
+MODEL_DOWNLOAD_TIMEOUT = 300
 
 
 class ModelManager:
@@ -13,6 +21,22 @@ class ModelManager:
     def __init__(self, cache_dir: Optional[Path] = None):
         self.cache_dir = cache_dir or self.CACHE_DIR
         self.cache_dir.mkdir(parents=True, exist_ok=True)
+
+    @staticmethod
+    def validate_model_name(model_name: str) -> None:
+        """Validate a model name against the allowlist.
+
+        Args:
+            model_name: Name to validate
+
+        Raises:
+            ValueError: If the model name doesn't match the expected pattern
+        """
+        if not isinstance(model_name, str) or not VALID_MODEL_PATTERN.match(model_name):
+            raise ValueError(
+                f"Invalid model name: {model_name!r}. "
+                "Expected format: xx_core_web_(sm|md|lg|trf)"
+            )
 
     def is_model_installed(self, model_name: str) -> bool:
         """Check if a model is installed.
@@ -42,7 +66,12 @@ class ModelManager:
 
         Returns:
             True if download succeeded
+
+        Raises:
+            ValueError: If model_name fails validation
         """
+        self.validate_model_name(model_name)
+
         if not force and self.is_model_installed(model_name):
             return True
 
@@ -53,15 +82,16 @@ class ModelManager:
 
     def _download_spacy_model(self, model_name: str) -> bool:
         """Download a spaCy model."""
-        import subprocess
-
-        result = subprocess.run(
-            ["python", "-m", "spacy", "download", model_name],
-            capture_output=True,
-            text=True,
-        )
-
-        return result.returncode == 0
+        try:
+            result = subprocess.run(
+                ["python", "-m", "spacy", "download", model_name],
+                capture_output=True,
+                text=True,
+                timeout=MODEL_DOWNLOAD_TIMEOUT,
+            )
+            return result.returncode == 0
+        except subprocess.TimeoutExpired:
+            return False
 
     def ensure_models(self, models: Optional[list[str]] = None) -> bool:
         """Ensure required models are installed.
