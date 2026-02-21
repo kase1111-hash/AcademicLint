@@ -1,8 +1,11 @@
 """Setup command implementation for AcademicLint CLI."""
 
+import subprocess
 from typing import Optional
 
 import click
+
+from academiclint.models.manager import MODEL_DOWNLOAD_TIMEOUT, ModelManager
 
 
 def run_setup(models: Optional[str], force: bool, offline: bool):
@@ -20,10 +23,14 @@ def run_setup(models: Optional[str], force: bool, offline: bool):
     else:
         model_list = ["en_core_web_lg"]
 
-    # Download spaCy models
+    # Validate and download spaCy models
     for model in model_list:
-        if model.startswith("en_core_web"):
-            download_spacy_model(model, force=force)
+        try:
+            ModelManager.validate_model_name(model)
+        except ValueError as e:
+            click.echo(f"  Skipping invalid model name: {e}", err=True)
+            continue
+        download_spacy_model(model, force=force)
 
     click.echo("\nSetup complete!")
     click.echo("Run 'academiclint check <file>' to analyze your writing.")
@@ -31,8 +38,6 @@ def run_setup(models: Optional[str], force: bool, offline: bool):
 
 def download_spacy_model(model: str, force: bool = False):
     """Download a spaCy model."""
-    import subprocess
-
     click.echo(f"Downloading spaCy model: {model}")
 
     try:
@@ -52,6 +57,7 @@ def download_spacy_model(model: str, force: bool = False):
             ["python", "-m", "spacy", "download", model],
             capture_output=True,
             text=True,
+            timeout=MODEL_DOWNLOAD_TIMEOUT,
         )
 
         if result.returncode == 0:
@@ -59,5 +65,7 @@ def download_spacy_model(model: str, force: bool = False):
         else:
             click.echo(f"  Error downloading {model}: {result.stderr}", err=True)
 
+    except subprocess.TimeoutExpired:
+        click.echo(f"  Error: Download of {model} timed out", err=True)
     except Exception as e:
         click.echo(f"  Error: {e}", err=True)

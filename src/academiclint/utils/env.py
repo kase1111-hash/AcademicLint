@@ -383,7 +383,7 @@ class EnvConfig:
     @property
     def api_host(self) -> str:
         """API server host."""
-        return get_env("API_HOST", default="0.0.0.0")
+        return get_env("API_HOST", default="127.0.0.1")
 
     @property
     def api_port(self) -> int:
