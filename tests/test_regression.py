@@ -453,6 +453,51 @@ class TestPreviouslyFixedBugs:
         ids = [result1.id, result2.id, result3.id]
         assert len(ids) == len(set(ids)), "Result IDs not unique"
 
+    def test_bug_leading_whitespace_drops_first_sentence(self):
+        """
+        Bug: spaCy folds leading whitespace into the first sentence, so it
+        started before its paragraph and was never assigned to it.
+        Original: First paragraph had 0 words/sentences, density 0.0, and
+        patterns anchored at the sentence start never matched it.
+        Expected: Leading whitespace is ignored.
+        """
+        result = Linter().check("\n    Freedom is the state of being free.\n")
+
+        para = result.paragraphs[0]
+        assert para.sentence_count == 1
+        assert para.word_count > 0
+        circular = [f for f in result.flags if f.type == FlagType.CIRCULAR]
+        assert len(circular) == 1
+        assert circular[0].line == 2
+
+    def test_bug_sentence_spans_paragraphs(self):
+        """
+        Bug: A sentence without terminal punctuation (e.g. a Markdown heading)
+        ran on into the next paragraph and was credited only to the first.
+        Original: Body paragraphs after headings had 0 words and density 0.0.
+        Expected: Sentences never cross a blank line.
+        """
+        text = "Introduction\n\nThis paragraph explains the method in detail."
+        result = Linter().check(text)
+
+        assert result.summary.paragraph_count == 2
+        for para in result.paragraphs:
+            assert para.sentence_count == 1
+            assert para.word_count > 0
+            assert para.density > 0.0
+
+    def test_bug_flags_dropped_from_result(self):
+        """
+        Bug: Flags were only kept if they started inside a paragraph's span,
+        so a sentence-level flag starting in leading whitespace vanished.
+        Original: summary.flag_count counted flags missing from result.flags.
+        Expected: Every detected flag appears in the result.
+        """
+        result = Linter().check("\n73% of students prefer online learning.\n")
+
+        assert len(result.flags) == result.summary.flag_count
+        assert any(f.type == FlagType.CITATION_NEEDED for f in result.flags)
+
 
 # =============================================================================
 # Performance Regression Guards
@@ -478,6 +523,7 @@ class TestPerformanceRegression:
         """Repeated analysis should have consistent timing."""
         text = "Test sentence for timing consistency check."
         linter = Linter()
+        linter.check(text)  # Warm up: the first call loads the spaCy model
 
         times = []
         for _ in range(3):

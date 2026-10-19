@@ -3,6 +3,7 @@
 import logging
 import time
 import uuid
+from bisect import bisect_right
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
@@ -16,6 +17,7 @@ from academiclint.core.exceptions import (
 )
 from academiclint.core.result import (
     AnalysisResult,
+    Flag,
     ParagraphResult,
     Summary,
 )
@@ -133,12 +135,19 @@ class Linter:
         total_words = 0
         total_sentences = 0
 
+        # Assign each flag to the last paragraph starting at or before it, so a
+        # flag that starts in leading whitespace or a paragraph gap is never
+        # dropped from the result.
+        para_starts = [para.span.start for para in doc.paragraphs]
+        flags_by_para: list[list[Flag]] = [[] for _ in doc.paragraphs]
+        if flags_by_para:
+            for f in all_flags:
+                index = max(bisect_right(para_starts, f.span.start) - 1, 0)
+                flags_by_para[index].append(f)
+
         for i, para in enumerate(doc.paragraphs):
             try:
-                para_flags = [
-                    f for f in all_flags
-                    if para.span.start <= f.span.start < para.span.end
-                ]
+                para_flags = flags_by_para[i]
                 # Extract tokens with lemmas from paragraph for accurate density calculation
                 para_tokens = [
                     (token.text, token.lemma, token.is_stop)
@@ -170,7 +179,7 @@ class Linter:
                         text=para.text,
                         span=para.span,
                         density=0.0,
-                        flags=[],
+                        flags=flags_by_para[i],
                         word_count=para.word_count,
                         sentence_count=para.sentence_count,
                     )

@@ -43,6 +43,12 @@ class TestValidateText:
         with pytest.raises(ValidationError, match="cannot be empty"):
             validate_text("")
 
+    @pytest.mark.parametrize("text", ["   ", "\n\t\n", "\r\n\r\n", "\x00\x00", " \x00 "])
+    def test_blank_after_sanitizing_raises_error(self, text):
+        """Test that whitespace or null-byte-only text raises ValidationError."""
+        with pytest.raises(ValidationError, match="cannot be empty"):
+            validate_text(text)
+
     def test_exceeds_max_length(self):
         """Test that text exceeding max length raises error."""
         long_text = "a" * (MAX_TEXT_LENGTH + 1)

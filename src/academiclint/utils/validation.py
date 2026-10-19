@@ -49,6 +49,9 @@ def validate_text(text: str, max_length: int = MAX_TEXT_LENGTH) -> str:
     # Remove null bytes (security measure)
     text = text.replace("\x00", "")
 
+    if not text.strip():
+        raise ValidationError("Text cannot be empty or whitespace only")
+
     return text
 
 

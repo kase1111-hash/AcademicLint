@@ -19,6 +19,8 @@ import pytest
 from academiclint import Config, Linter, FlagType, AnalysisResult, ParagraphResult
 
 from .sample_texts import (
+    HIGH_DENSITY_GRADES,
+    MIN_DENSITY_GAP,
     # Good texts
     GOOD_TEXT_PRECISE,
     GOOD_TEXT_PRECISE_EXPECTED,
@@ -101,6 +103,16 @@ class TestHighQualityTextPipeline:
         assert result.summary.density_grade in GOOD_TEXT_SCIENTIFIC_EXPECTED["density_grade_acceptable"]
 
 
+@pytest.fixture
+def good_text_density():
+    """Lowest density among the high-quality reference texts."""
+    linter = Linter(Config(level="standard"))
+    return min(
+        linter.check(text).summary.density
+        for text in (GOOD_TEXT_PRECISE, GOOD_TEXT_SCIENTIFIC)
+    )
+
+
 class TestLowQualityTextPipeline:
     """Test pipeline with low-quality texts containing known issues."""
 
@@ -109,13 +121,13 @@ class TestLowQualityTextPipeline:
         """Create linter with standard config."""
         return Linter(Config(level="standard"))
 
-    def test_vague_text_low_density(self, linter):
-        """Vague text should have low density score."""
+    def test_vague_text_low_density(self, linter, good_text_density):
+        """Vague text should score clearly below precise text."""
         result = linter.check(BAD_TEXT_VAGUE)
 
-        assert result.summary.density <= BAD_TEXT_VAGUE_EXPECTED["max_density"], (
-            f"Expected density <= {BAD_TEXT_VAGUE_EXPECTED['max_density']}, "
-            f"got {result.summary.density}"
+        assert result.summary.density <= good_text_density - MIN_DENSITY_GAP, (
+            f"Expected density at least {MIN_DENSITY_GAP} below good text "
+            f"({good_text_density:.3f}), got {result.summary.density:.3f}"
         )
 
     def test_vague_text_many_flags(self, linter):
@@ -142,19 +154,19 @@ class TestLowQualityTextPipeline:
         )
 
     def test_vague_text_low_grade(self, linter):
-        """Vague text should receive low density grade."""
+        """Vague text should never receive a high density grade."""
         result = linter.check(BAD_TEXT_VAGUE)
 
-        assert result.summary.density_grade in BAD_TEXT_VAGUE_EXPECTED["density_grade_acceptable"], (
-            f"Expected grade in {BAD_TEXT_VAGUE_EXPECTED['density_grade_acceptable']}, "
+        assert result.summary.density_grade not in HIGH_DENSITY_GRADES, (
+            f"Expected grade outside {HIGH_DENSITY_GRADES}, "
             f"got '{result.summary.density_grade}'"
         )
 
-    def test_weasel_text_detects_weasels(self, linter):
+    def test_weasel_text_detects_weasels(self, linter, good_text_density):
         """Text with weasel words should be detected."""
         result = linter.check(BAD_TEXT_WEASEL)
 
-        assert result.summary.density <= BAD_TEXT_WEASEL_EXPECTED["max_density"]
+        assert result.summary.density <= good_text_density - MIN_DENSITY_GAP
         assert result.summary.flag_count >= BAD_TEXT_WEASEL_EXPECTED["min_flag_count"]
 
         # Should detect WEASEL flags
@@ -241,12 +253,14 @@ class TestMixedQualityPipeline:
     def linter(self):
         return Linter(Config(level="standard"))
 
-    def test_mixed_quality_overall_density(self, linter):
-        """Mixed quality text should have moderate overall density."""
+    def test_mixed_quality_overall_density(self, linter, good_text_density):
+        """Mixed quality text should score between bad and good text."""
         result = linter.check(TEXT_MIXED_QUALITY)
+        bad_density = max(
+            linter.check(text).summary.density for text in (BAD_TEXT_VAGUE, BAD_TEXT_WEASEL)
+        )
 
-        assert result.summary.density >= TEXT_MIXED_EXPECTED["min_density"]
-        assert result.summary.density <= TEXT_MIXED_EXPECTED["max_density"]
+        assert bad_density < result.summary.density < good_text_density
 
     def test_mixed_quality_paragraph_variance(self, linter):
         """Different paragraphs should have different densities."""

@@ -122,6 +122,7 @@ class TestLoadNormalUsage:
 
     def test_repeated_analyses_stable(self, linter, sample_paragraph):
         """Repeated analyses should have stable performance."""
+        linter.check(sample_paragraph)  # Warm up: the first call loads the spaCy model
         times = []
 
         for _ in range(5):

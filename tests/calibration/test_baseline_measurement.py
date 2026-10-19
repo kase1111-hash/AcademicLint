@@ -81,7 +81,7 @@ class TestBaselineBadWriting:
     def test_circular_definitions_flagged(self, linter):
         """Circular definitions should be caught."""
         result = linter.check(BAD_WRITING_SAMPLES["circular_definitions"])
-        circular_flags = [f for f in result.flags if f.type == FlagType.CIRCULAR_DEFINITION]
+        circular_flags = [f for f in result.flags if f.type == FlagType.CIRCULAR]
         assert len(circular_flags) >= 2, (
             f"Only {len(circular_flags)} circular flags on 4 circular definitions"
         )
