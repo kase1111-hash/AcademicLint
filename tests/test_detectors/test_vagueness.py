@@ -3,7 +3,6 @@
 import pytest
 
 from academiclint.core.config import Config
-from academiclint.core.pipeline import NLPPipeline
 from academiclint.core.result import FlagType
 from academiclint.detectors.vagueness import VaguenessDetector
 

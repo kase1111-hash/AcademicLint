@@ -1,9 +1,10 @@
 """Model download and management for AcademicLint."""
 
 import re
-import subprocess
+import subprocess  # nosec B404
+import sys
 from pathlib import Path
-from typing import Optional
+from typing import ClassVar
 
 # Strict allowlist for spaCy model names: language_core_web_size
 VALID_MODEL_PATTERN = re.compile(r"^[a-z]{2}_core_web_(sm|md|lg|trf)$")
@@ -15,10 +16,10 @@ MODEL_DOWNLOAD_TIMEOUT = 300
 class ModelManager:
     """Manages NLP model downloads and caching."""
 
-    DEFAULT_MODELS = ["en_core_web_lg"]
+    DEFAULT_MODELS: ClassVar[list[str]] = ["en_core_web_lg"]
     CACHE_DIR = Path.home() / ".cache" / "academiclint" / "models"
 
-    def __init__(self, cache_dir: Optional[Path] = None):
+    def __init__(self, cache_dir: Path | None = None):
         self.cache_dir = cache_dir or self.CACHE_DIR
         self.cache_dir.mkdir(parents=True, exist_ok=True)
 
@@ -34,8 +35,7 @@ class ModelManager:
         """
         if not isinstance(model_name, str) or not VALID_MODEL_PATTERN.match(model_name):
             raise ValueError(
-                f"Invalid model name: {model_name!r}. "
-                "Expected format: xx_core_web_(sm|md|lg|trf)"
+                f"Invalid model name: {model_name!r}. Expected format: xx_core_web_(sm|md|lg|trf)"
             )
 
     def is_model_installed(self, model_name: str) -> bool:
@@ -83,17 +83,20 @@ class ModelManager:
     def _download_spacy_model(self, model_name: str) -> bool:
         """Download a spaCy model."""
         try:
-            result = subprocess.run(
-                ["python", "-m", "spacy", "download", model_name],
+            # Use this interpreter so the model lands in the environment that
+            # runs academiclint; callers validate model_name first.
+            result = subprocess.run(  # noqa: S603  # nosec B603
+                [sys.executable, "-m", "spacy", "download", model_name],
                 capture_output=True,
                 text=True,
                 timeout=MODEL_DOWNLOAD_TIMEOUT,
+                check=False,
             )
             return result.returncode == 0
         except subprocess.TimeoutExpired:
             return False
 
-    def ensure_models(self, models: Optional[list[str]] = None) -> bool:
+    def ensure_models(self, models: list[str] | None = None) -> bool:
         """Ensure required models are installed.
 
         Args:
@@ -106,9 +109,8 @@ class ModelManager:
 
         all_installed = True
         for model in models:
-            if not self.is_model_installed(model):
-                if not self.download_model(model):
-                    all_installed = False
+            if not self.is_model_installed(model) and not self.download_model(model):
+                all_installed = False
 
         return all_installed
 

@@ -18,7 +18,7 @@ class GitHubFormatter(Formatter):
 
         for flag in result.flags:
             level = self._severity_to_level(flag.severity)
-            message = f"{flag.type.value}: \"{flag.term}\" - {flag.suggestion}"
+            message = f'{flag.type.value}: "{flag.term}" - {flag.suggestion}'
 
             # GitHub Actions workflow command format
             lines.append(

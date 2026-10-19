@@ -4,14 +4,13 @@ import logging
 import time
 import uuid
 from bisect import bisect_right
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING
 
 from academiclint.core.config import Config
 from academiclint.core.exceptions import (
     AcademicLintError,
-    DetectorError,
     ParsingError,
     ValidationError,
 )
@@ -27,6 +26,10 @@ from academiclint.utils.validation import (
     validate_text,
 )
 
+if TYPE_CHECKING:
+    from academiclint.core.pipeline import NLPPipeline, ProcessedDocument
+    from academiclint.detectors.base import Detector
+
 logger = logging.getLogger(__name__)
 
 
@@ -38,7 +41,7 @@ class Linter:
     weasel words, and more.
     """
 
-    def __init__(self, config: Optional[Config] = None):
+    def __init__(self, config: Config | None = None):
         """Initialize linter with configuration.
 
         Args:
@@ -49,15 +52,16 @@ class Linter:
             ConfigurationError: If the config values are invalid
         """
         if config is not None and not isinstance(config, Config):
-            raise ValidationError(
-                f"config must be a Config instance, got {type(config).__name__}"
-            )
+            raise ValidationError(f"config must be a Config instance, got {type(config).__name__}")
         self.config = config or Config()
-        self._nlp = None  # Lazy-loaded NLP pipeline
-        self._detectors = None  # Lazy-loaded detector modules
+        self._nlp: NLPPipeline | None = None  # Lazy-loaded NLP pipeline
+        self._detectors: list[Detector] | None = None  # Lazy-loaded detector modules
 
-    def _ensure_pipeline(self) -> None:
+    def _ensure_pipeline(self) -> "NLPPipeline":
         """Ensure NLP pipeline is loaded.
+
+        Returns:
+            The NLP pipeline
 
         Raises:
             ModelNotFoundError: If spaCy model is not installed
@@ -67,13 +71,19 @@ class Linter:
             from academiclint.core.pipeline import NLPPipeline
 
             self._nlp = NLPPipeline()
+        return self._nlp
 
-    def _ensure_detectors(self) -> None:
-        """Ensure detector modules are loaded."""
+    def _ensure_detectors(self) -> "list[Detector]":
+        """Ensure detector modules are loaded.
+
+        Returns:
+            The detector instances
+        """
         if self._detectors is None:
             from academiclint.detectors import get_all_detectors
 
             self._detectors = get_all_detectors()
+        return self._detectors
 
     def check(self, text: str) -> AnalysisResult:
         """Analyze text for semantic clarity issues.
@@ -95,24 +105,30 @@ class Linter:
 
         start_time = time.perf_counter()
         check_id = f"check_{uuid.uuid4().hex[:12]}"
-        created_at = datetime.now(timezone.utc).isoformat()
+        created_at = datetime.now(UTC).isoformat()
 
         logger.info("Starting analysis [id=%s, length=%d chars]", check_id, len(text))
-        logger.debug("Configuration: level=%s, min_density=%.2f", self.config.level, self.config.min_density)
+        logger.debug(
+            "Configuration: level=%s, min_density=%.2f", self.config.level, self.config.min_density
+        )
 
-        self._ensure_pipeline()
-        self._ensure_detectors()
+        nlp = self._ensure_pipeline()
+        detectors = self._ensure_detectors()
 
         # Process document through NLP pipeline
         logger.debug("Processing document through NLP pipeline")
-        doc = self._nlp.process(text)
-        logger.debug("NLP processing complete: %d tokens, %d sentences, %d paragraphs",
-                    len(doc.tokens), len(doc.sentences), len(doc.paragraphs))
+        doc = nlp.process(text)
+        logger.debug(
+            "NLP processing complete: %d tokens, %d sentences, %d paragraphs",
+            len(doc.tokens),
+            len(doc.sentences),
+            len(doc.paragraphs),
+        )
 
         # Run all detectors with error handling
-        logger.debug("Running %d detectors", len(self._detectors))
+        logger.debug("Running %d detectors", len(detectors))
         all_flags = []
-        for detector in self._detectors:
+        for detector in detectors:
             try:
                 flags = detector.detect(doc, self.config)
                 all_flags.extend(flags)
@@ -128,71 +144,15 @@ class Linter:
                 # Continue with other detectors instead of failing completely
                 # In strict mode, we could raise DetectorError here
 
-        # Calculate density for each paragraph
         from academiclint.density import calculate_density
 
-        paragraphs = []
-        total_words = 0
-        total_sentences = 0
-
-        # Assign each flag to the last paragraph starting at or before it, so a
-        # flag that starts in leading whitespace or a paragraph gap is never
-        # dropped from the result.
-        para_starts = [para.span.start for para in doc.paragraphs]
-        flags_by_para: list[list[Flag]] = [[] for _ in doc.paragraphs]
-        if flags_by_para:
-            for f in all_flags:
-                index = max(bisect_right(para_starts, f.span.start) - 1, 0)
-                flags_by_para[index].append(f)
-
-        for i, para in enumerate(doc.paragraphs):
-            try:
-                para_flags = flags_by_para[i]
-                # Extract tokens with lemmas from paragraph for accurate density calculation
-                para_tokens = [
-                    (token.text, token.lemma, token.is_stop)
-                    for sent in para.sentences
-                    for token in sent.tokens
-                ]
-                density = calculate_density(
-                    para.text, para_flags, self.config, tokens_with_lemmas=para_tokens
-                )
-
-                para_result = ParagraphResult(
-                    index=i,
-                    text=para.text,
-                    span=para.span,
-                    density=density,
-                    flags=para_flags,
-                    word_count=para.word_count,
-                    sentence_count=para.sentence_count,
-                )
-                paragraphs.append(para_result)
-                total_words += para.word_count
-                total_sentences += para.sentence_count
-            except Exception as e:
-                logger.warning(f"Failed to process paragraph {i}: {e}")
-                # Create minimal paragraph result
-                paragraphs.append(
-                    ParagraphResult(
-                        index=i,
-                        text=para.text,
-                        span=para.span,
-                        density=0.0,
-                        flags=flags_by_para[i],
-                        word_count=para.word_count,
-                        sentence_count=para.sentence_count,
-                    )
-                )
-                total_words += para.word_count
-                total_sentences += para.sentence_count
+        paragraphs = self._build_paragraphs(doc, all_flags)
+        total_words = sum(p.word_count for p in paragraphs)
+        total_sentences = sum(p.sentence_count for p in paragraphs)
 
         # Calculate overall density using all document tokens
         try:
-            all_tokens = [
-                (token.text, token.lemma, token.is_stop)
-                for token in doc.tokens
-            ]
+            all_tokens = [(token.text, token.lemma, token.is_stop) for token in doc.tokens]
             overall_density = calculate_density(
                 text, all_flags, self.config, tokens_with_lemmas=all_tokens
             )
@@ -231,10 +191,72 @@ class Linter:
 
         logger.info(
             "Analysis complete [id=%s, time=%dms, flags=%d, density=%.2f (%s)]",
-            check_id, processing_time_ms, len(all_flags), overall_density, density_grade
+            check_id,
+            processing_time_ms,
+            len(all_flags),
+            overall_density,
+            density_grade,
         )
 
         return result
+
+    def _build_paragraphs(
+        self, doc: "ProcessedDocument", all_flags: list[Flag]
+    ) -> list[ParagraphResult]:
+        """Assign flags to paragraphs and score each paragraph's density."""
+        from academiclint.density import calculate_density
+
+        paragraphs = []
+
+        # Assign each flag to the last paragraph starting at or before it, so a
+        # flag that starts in leading whitespace or a paragraph gap is never
+        # dropped from the result.
+        para_starts = [para.span.start for para in doc.paragraphs]
+        flags_by_para: list[list[Flag]] = [[] for _ in doc.paragraphs]
+        if flags_by_para:
+            for f in all_flags:
+                index = max(bisect_right(para_starts, f.span.start) - 1, 0)
+                flags_by_para[index].append(f)
+
+        for i, para in enumerate(doc.paragraphs):
+            try:
+                para_flags = flags_by_para[i]
+                # Extract tokens with lemmas from paragraph for accurate density calculation
+                para_tokens = [
+                    (token.text, token.lemma, token.is_stop)
+                    for sent in para.sentences
+                    for token in sent.tokens
+                ]
+                density = calculate_density(
+                    para.text, para_flags, self.config, tokens_with_lemmas=para_tokens
+                )
+
+                para_result = ParagraphResult(
+                    index=i,
+                    text=para.text,
+                    span=para.span,
+                    density=density,
+                    flags=para_flags,
+                    word_count=para.word_count,
+                    sentence_count=para.sentence_count,
+                )
+                paragraphs.append(para_result)
+            except Exception as e:
+                logger.warning(f"Failed to process paragraph {i}: {e}")
+                # Create minimal paragraph result
+                paragraphs.append(
+                    ParagraphResult(
+                        index=i,
+                        text=para.text,
+                        span=para.span,
+                        density=0.0,
+                        flags=flags_by_para[i],
+                        word_count=para.word_count,
+                        sentence_count=para.sentence_count,
+                    )
+                )
+
+        return paragraphs
 
     def check_file(self, path: Path | str) -> AnalysisResult:
         """Analyze a file.
@@ -268,7 +290,7 @@ class Linter:
             raise ParsingError(
                 f"Failed to parse file: {e}",
                 file_path=str(validated_path),
-            )
+            ) from e
 
         return self.check(text)
 

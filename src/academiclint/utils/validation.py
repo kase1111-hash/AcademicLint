@@ -2,10 +2,8 @@
 
 import re
 from pathlib import Path
-from typing import Optional
 
 from academiclint.core.exceptions import ValidationError
-
 
 # Maximum text length to prevent memory issues
 MAX_TEXT_LENGTH = 10_000_000  # 10 million characters
@@ -82,13 +80,13 @@ def validate_file_path(
     try:
         path = Path(path)
     except (TypeError, ValueError) as e:
-        raise ValidationError(f"Invalid file path: {e}")
+        raise ValidationError(f"Invalid file path: {e}") from e
 
     # Security: prevent path traversal attacks
     try:
         resolved = path.resolve()
     except (OSError, RuntimeError) as e:
-        raise ValidationError(f"Cannot resolve file path: {e}")
+        raise ValidationError(f"Cannot resolve file path: {e}") from e
 
     if must_exist:
         if not resolved.exists():
@@ -101,11 +99,10 @@ def validate_file_path(
             size = resolved.stat().st_size
             if size > max_size:
                 raise ValidationError(
-                    f"File exceeds maximum size of {max_size:,} bytes "
-                    f"(got {size:,} bytes)"
+                    f"File exceeds maximum size of {max_size:,} bytes (got {size:,} bytes)"
                 )
         except OSError as e:
-            raise ValidationError(f"Cannot read file stats: {e}")
+            raise ValidationError(f"Cannot read file stats: {e}") from e
 
     if check_extension:
         suffix = path.suffix.lower()
@@ -148,9 +145,7 @@ def validate_paths(
     validated = []
     for path in paths:
         validated.append(
-            validate_file_path(
-                path, must_exist=must_exist, check_extension=check_extension
-            )
+            validate_file_path(path, must_exist=must_exist, check_extension=check_extension)
         )
 
     return validated
@@ -183,14 +178,12 @@ def sanitize_pattern(pattern: str) -> str:
 
     for dangerous in dangerous_patterns:
         if re.search(dangerous, pattern):
-            raise ValidationError(
-                "Pattern contains potentially dangerous nested quantifiers"
-            )
+            raise ValidationError("Pattern contains potentially dangerous nested quantifiers")
 
     # Try to compile the pattern to check for syntax errors
     try:
         re.compile(pattern)
     except re.error as e:
-        raise ValidationError(f"Invalid regex pattern: {e}")
+        raise ValidationError(f"Invalid regex pattern: {e}") from e
 
     return pattern

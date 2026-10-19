@@ -2,7 +2,6 @@
 
 import sys
 from pathlib import Path
-from typing import Optional
 
 import click
 
@@ -12,25 +11,22 @@ def run_check(
     level: str,
     output_format: str,
     min_density: float,
-    fail_under: Optional[float],
-    domain: Optional[str],
-    domain_file: Optional[str],
-    sections: Optional[str],
-    config_path: Optional[str],
+    fail_under: float | None,
+    domain: str | None,
+    domain_file: str | None,
+    sections: str | None,
+    config_path: str | None,
     no_color: bool,
     quiet: bool,
     verbose: bool,
-    output_path: Optional[str],
+    output_path: str | None,
 ):
     """Run the check command."""
     from academiclint import Config, Linter, OutputConfig
     from academiclint.formatters import get_formatter
 
     # Build configuration
-    if config_path:
-        config = Config.from_file(config_path)
-    else:
-        config = Config()
+    config = Config.from_file(config_path) if config_path else Config()
 
     # Override with CLI options
     config.level = level
@@ -60,7 +56,7 @@ def run_check(
     # Process files or stdin
     if not files or files == ("-",):
         # Read from stdin
-        text = click.get_text_stream("stdin").read()
+        text = sys.stdin.read()
         result = linter.check(text)
         output_text = formatter.format(result)
     else:

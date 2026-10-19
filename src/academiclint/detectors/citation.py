@@ -55,10 +55,7 @@ class CitationDetector(Detector):
 
     def _has_citation(self, text: str) -> bool:
         """Check if text contains a citation."""
-        for pattern in CITATION_PATTERNS:
-            if re.search(pattern, text):
-                return True
-        return False
+        return any(re.search(pattern, text) for pattern in CITATION_PATTERNS)
 
     def _get_severity(self, pattern: str) -> Severity:
         """Determine severity based on claim type."""

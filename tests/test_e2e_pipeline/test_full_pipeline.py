@@ -10,51 +10,49 @@ expected results for known inputs, testing all components together:
 - Output formatting
 """
 
-import json
 import tempfile
 from pathlib import Path
 
 import pytest
 
-from academiclint import Config, Linter, FlagType, AnalysisResult, ParagraphResult
+from academiclint import AnalysisResult, Config, FlagType, Linter, ParagraphResult
 
 from .sample_texts import (
-    HIGH_DENSITY_GRADES,
-    MIN_DENSITY_GAP,
-    # Good texts
-    GOOD_TEXT_PRECISE,
-    GOOD_TEXT_PRECISE_EXPECTED,
-    GOOD_TEXT_SCIENTIFIC,
-    GOOD_TEXT_SCIENTIFIC_EXPECTED,
     # Bad texts
     BAD_TEXT_VAGUE,
     BAD_TEXT_VAGUE_EXPECTED,
     BAD_TEXT_WEASEL,
     BAD_TEXT_WEASEL_EXPECTED,
+    # Good texts
+    GOOD_TEXT_PRECISE,
+    GOOD_TEXT_PRECISE_EXPECTED,
+    GOOD_TEXT_SCIENTIFIC,
+    GOOD_TEXT_SCIENTIFIC_EXPECTED,
+    HIGH_DENSITY_GRADES,
+    MIN_DENSITY_GAP,
+    TEXT_CAUSAL_CLAIMS,
+    TEXT_CAUSAL_EXPECTED,
     # Specific issue texts
     TEXT_CIRCULAR_DEFINITIONS,
     TEXT_CIRCULAR_EXPECTED,
-    TEXT_CAUSAL_CLAIMS,
-    TEXT_CAUSAL_EXPECTED,
-    TEXT_HEDGE_STACK,
-    TEXT_HEDGE_EXPECTED,
-    TEXT_CITATION_NEEDED,
     TEXT_CITATION_EXPECTED,
-    TEXT_JARGON_DENSE,
-    TEXT_JARGON_EXPECTED,
-    TEXT_FILLER_HEAVY,
+    TEXT_CITATION_NEEDED,
     TEXT_FILLER_EXPECTED,
-    # Mixed and edge cases
-    TEXT_MIXED_QUALITY,
-    TEXT_MIXED_EXPECTED,
-    TEXT_SINGLE_SENTENCE,
-    TEXT_SINGLE_EXPECTED,
-    TEXT_UNICODE,
-    TEXT_UNICODE_EXPECTED,
-    TEXT_LATEX_STYLE,
+    TEXT_FILLER_HEAVY,
+    TEXT_HEDGE_EXPECTED,
+    TEXT_HEDGE_STACK,
+    TEXT_JARGON_DENSE,
     TEXT_LATEX_EXPECTED,
+    TEXT_LATEX_STYLE,
     TEXT_MARKDOWN,
     TEXT_MARKDOWN_EXPECTED,
+    TEXT_MIXED_EXPECTED,
+    # Mixed and edge cases
+    TEXT_MIXED_QUALITY,
+    TEXT_SINGLE_EXPECTED,
+    TEXT_SINGLE_SENTENCE,
+    TEXT_UNICODE,
+    TEXT_UNICODE_EXPECTED,
 )
 
 
@@ -89,7 +87,9 @@ class TestHighQualityTextPipeline:
         """Precise text should receive acceptable density grade."""
         result = linter.check(GOOD_TEXT_PRECISE)
 
-        assert result.summary.density_grade in GOOD_TEXT_PRECISE_EXPECTED["density_grade_acceptable"], (
+        assert (
+            result.summary.density_grade in GOOD_TEXT_PRECISE_EXPECTED["density_grade_acceptable"]
+        ), (
             f"Expected grade in {GOOD_TEXT_PRECISE_EXPECTED['density_grade_acceptable']}, "
             f"got '{result.summary.density_grade}'"
         )
@@ -100,7 +100,10 @@ class TestHighQualityTextPipeline:
 
         assert result.summary.density >= GOOD_TEXT_SCIENTIFIC_EXPECTED["min_density"]
         assert result.summary.flag_count <= GOOD_TEXT_SCIENTIFIC_EXPECTED["max_flag_count"]
-        assert result.summary.density_grade in GOOD_TEXT_SCIENTIFIC_EXPECTED["density_grade_acceptable"]
+        assert (
+            result.summary.density_grade
+            in GOOD_TEXT_SCIENTIFIC_EXPECTED["density_grade_acceptable"]
+        )
 
 
 @pytest.fixture
@@ -108,8 +111,7 @@ def good_text_density():
     """Lowest density among the high-quality reference texts."""
     linter = Linter(Config(level="standard"))
     return min(
-        linter.check(text).summary.density
-        for text in (GOOD_TEXT_PRECISE, GOOD_TEXT_SCIENTIFIC)
+        linter.check(text).summary.density for text in (GOOD_TEXT_PRECISE, GOOD_TEXT_SCIENTIFIC)
     )
 
 
@@ -149,8 +151,7 @@ class TestLowQualityTextPipeline:
         # At least some expected types should be present
         intersection = flag_types & expected_types
         assert len(intersection) > 0, (
-            f"Expected at least one of {expected_types} in flags, "
-            f"got {flag_types}"
+            f"Expected at least one of {expected_types} in flags, got {flag_types}"
         )
 
     def test_vague_text_low_grade(self, linter):
@@ -158,8 +159,7 @@ class TestLowQualityTextPipeline:
         result = linter.check(BAD_TEXT_VAGUE)
 
         assert result.summary.density_grade not in HIGH_DENSITY_GRADES, (
-            f"Expected grade outside {HIGH_DENSITY_GRADES}, "
-            f"got '{result.summary.density_grade}'"
+            f"Expected grade outside {HIGH_DENSITY_GRADES}, got '{result.summary.density_grade}'"
         )
 
     def test_weasel_text_detects_weasels(self, linter, good_text_density):
@@ -274,9 +274,10 @@ class TestMixedQualityPipeline:
             second_density = result.paragraphs[1].density
 
             # First paragraph should generally be better
-            assert first_density >= TEXT_MIXED_EXPECTED["first_paragraph_min_density"] or \
-                   second_density <= TEXT_MIXED_EXPECTED["second_paragraph_max_density"], \
-                   "Expected variance in paragraph quality"
+            assert (
+                first_density >= TEXT_MIXED_EXPECTED["first_paragraph_min_density"]
+                or second_density <= TEXT_MIXED_EXPECTED["second_paragraph_max_density"]
+            ), "Expected variance in paragraph quality"
 
 
 class TestEdgeCasesPipeline:
@@ -493,15 +494,26 @@ class TestDomainCustomizationPipeline:
         result_no_domain = linter_no_domain.check(text_with_terms)
 
         # With domain terms
-        linter_with_domain = Linter(Config(
-            level="strict",
-            domain_terms=["epistemological", "methodological", "hermeneutical", "phenomenological"]
-        ))
+        linter_with_domain = Linter(
+            Config(
+                level="strict",
+                domain_terms=[
+                    "epistemological",
+                    "methodological",
+                    "hermeneutical",
+                    "phenomenological",
+                ],
+            )
+        )
         result_with_domain = linter_with_domain.check(text_with_terms)
 
         # Jargon flags should be reduced
-        jargon_no_domain = len([f for f in result_no_domain.flags if f.type == FlagType.JARGON_DENSE])
-        jargon_with_domain = len([f for f in result_with_domain.flags if f.type == FlagType.JARGON_DENSE])
+        jargon_no_domain = len(
+            [f for f in result_no_domain.flags if f.type == FlagType.JARGON_DENSE]
+        )
+        jargon_with_domain = len(
+            [f for f in result_with_domain.flags if f.type == FlagType.JARGON_DENSE]
+        )
 
         assert jargon_with_domain <= jargon_no_domain
 

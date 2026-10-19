@@ -1,7 +1,5 @@
 """Tests for the main Linter class."""
 
-import pytest
-
 from academiclint import Config, Linter
 from academiclint.core.result import FlagType
 

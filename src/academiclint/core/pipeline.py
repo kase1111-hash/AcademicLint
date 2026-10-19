@@ -71,10 +71,10 @@ class ProcessedDocument:
     noun_chunks: list[NounChunk] = field(default_factory=list)
     concept_count: int = 0
     filler_ratio: float = 0.0
-    _spacy_doc: Optional[Any] = field(default=None, repr=False)
+    _spacy_doc: Any | None = field(default=None, repr=False)
 
     @property
-    def spacy_doc(self) -> Optional[Any]:
+    def spacy_doc(self) -> Any | None:
         """Access the underlying spaCy Doc, if available."""
         return self._spacy_doc
 
@@ -126,7 +126,7 @@ def _mark_paragraph_starts(doc: Any) -> Any:
 class NLPPipeline:
     """Core NLP processing pipeline."""
 
-    def __init__(self, model_name: Optional[str] = None):
+    def __init__(self, model_name: str | None = None):
         """Initialize the NLP pipeline.
 
         Args:
@@ -135,17 +135,20 @@ class NLPPipeline:
         """
         self.model_name = model_name or DEFAULT_MODEL
         self._candidates = (model_name,) if model_name else FALLBACK_MODELS
-        self._nlp: Optional[Any] = None
+        self._nlp: Any | None = None
 
-    def _ensure_loaded(self) -> None:
+    def _ensure_loaded(self) -> Any:
         """Ensure the spaCy model is loaded.
+
+        Returns:
+            The loaded spaCy Language object
 
         Raises:
             ModelNotFoundError: If no candidate spaCy model is installed
             ProcessingError: If spaCy fails to load for other reasons
         """
         if self._nlp is not None:
-            return
+            return self._nlp
 
         try:
             import spacy
@@ -183,7 +186,7 @@ class NLPPipeline:
                 )
             self.model_name = candidate
             logger.debug("spaCy model loaded successfully")
-            return
+            return self._nlp
 
         logger.error("spaCy model not found: %s", self.model_name)
         raise ModelNotFoundError(self.model_name)
@@ -201,17 +204,17 @@ class NLPPipeline:
             ModelNotFoundError: If the spaCy model is not installed
             ProcessingError: If NLP processing fails
         """
-        self._ensure_loaded()
+        nlp = self._ensure_loaded()
 
         try:
-            doc = self._nlp(text)
-        except MemoryError:
+            doc = nlp(text)
+        except MemoryError as e:
             raise ProcessingError(
                 "Out of memory while processing document. "
                 "Try processing a smaller document or increasing available memory."
-            )
+            ) from e
         except Exception as e:
-            raise ProcessingError("NLP processing failed", original_error=e)
+            raise ProcessingError("NLP processing failed", original_error=e) from e
 
         try:
             # Extract tokens
@@ -286,10 +289,10 @@ class NLPPipeline:
             # Re-raise our own exceptions
             raise
         except Exception as e:
-            raise ProcessingError("Failed to extract document features", original_error=e)
+            raise ProcessingError("Failed to extract document features", original_error=e) from e
 
     @staticmethod
-    def _build_sentence(sent: Any) -> Optional[Sentence]:
+    def _build_sentence(sent: Any) -> Sentence | None:
         """Convert a spaCy sentence span into a Sentence.
 
         The text and span are trimmed to the sentence's content: spaCy folds
@@ -348,8 +351,8 @@ class NLPPipeline:
             ]
 
             current_pos = 0
-            for para_text in para_texts:
-                para_text = para_text.strip()
+            for raw_para in para_texts:
+                para_text = raw_para.strip()
                 if not para_text:
                     continue
 
@@ -369,10 +372,7 @@ class NLPPipeline:
                     if start <= sentence.span.start < end:
                         para_sentences.append(sentence)
                         # Count words in this sentence (non-punctuation, non-space)
-                        word_count += len([
-                            t for t in sent
-                            if not t.is_punct and not t.is_space
-                        ])
+                        word_count += len([t for t in sent if not t.is_punct and not t.is_space])
 
                 paragraphs.append(
                     Paragraph(
@@ -386,4 +386,4 @@ class NLPPipeline:
 
             return paragraphs
         except Exception as e:
-            raise ProcessingError("Failed to extract paragraphs", original_error=e)
+            raise ProcessingError("Failed to extract paragraphs", original_error=e) from e

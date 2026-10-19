@@ -2,7 +2,6 @@
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
 
 import yaml
 
@@ -11,6 +10,23 @@ from academiclint.core.exceptions import ConfigurationError
 # Valid values for configuration options
 VALID_LEVELS = frozenset({"relaxed", "standard", "strict", "academic"})
 VALID_OUTPUT_FORMATS = frozenset({"terminal", "json", "markdown", "github"})
+
+
+def _validate_unit_interval(name: str, value: object) -> None:
+    """Raise ConfigurationError unless value is a number in [0.0, 1.0]."""
+    if not isinstance(value, (int, float)):
+        raise ConfigurationError(f"{name} must be a number, got {type(value).__name__}")
+    if not 0.0 <= value <= 1.0:
+        raise ConfigurationError(f"{name} must be between 0.0 and 1.0, got {value}")
+
+
+def _validate_str_list(name: str, value: object) -> None:
+    """Raise ConfigurationError unless value is a list of strings."""
+    if not isinstance(value, list):
+        raise ConfigurationError(f"{name} must be a list")
+    for item in value:
+        if not isinstance(item, str):
+            raise ConfigurationError(f"All {name} must be strings, got {type(item).__name__}")
 
 
 @dataclass
@@ -43,8 +59,8 @@ class Config:
     min_density: float = 0.50
 
     # Domain customization
-    domain: Optional[str] = None  # Built-in domain name
-    domain_file: Optional[Path] = None  # Custom domain file path
+    domain: str | None = None  # Built-in domain name
+    domain_file: Path | None = None  # Custom domain file path
     domain_terms: list[str] = field(default_factory=list)  # Inline domain terms
 
     # Custom patterns
@@ -52,13 +68,13 @@ class Config:
     ignore_patterns: list[str] = field(default_factory=list)
 
     # Processing options
-    sections: Optional[list[str]] = None  # Only analyze these sections
+    sections: list[str] | None = None  # Only analyze these sections
 
     # Output
     output: OutputConfig = field(default_factory=OutputConfig)
 
     # Thresholds (derived from level if not set)
-    fail_under: Optional[float] = None  # Exit with error if below
+    fail_under: float | None = None  # Exit with error if below
 
     def __post_init__(self):
         """Validate configuration after initialization."""
@@ -73,30 +89,12 @@ class Config:
         # Validate level
         if self.level not in VALID_LEVELS:
             raise ConfigurationError(
-                f"Invalid level '{self.level}'. "
-                f"Valid options: {', '.join(sorted(VALID_LEVELS))}"
+                f"Invalid level '{self.level}'. Valid options: {', '.join(sorted(VALID_LEVELS))}"
             )
 
-        # Validate min_density
-        if not isinstance(self.min_density, (int, float)):
-            raise ConfigurationError(
-                f"min_density must be a number, got {type(self.min_density).__name__}"
-            )
-        if not 0.0 <= self.min_density <= 1.0:
-            raise ConfigurationError(
-                f"min_density must be between 0.0 and 1.0, got {self.min_density}"
-            )
-
-        # Validate fail_under
+        _validate_unit_interval("min_density", self.min_density)
         if self.fail_under is not None:
-            if not isinstance(self.fail_under, (int, float)):
-                raise ConfigurationError(
-                    f"fail_under must be a number, got {type(self.fail_under).__name__}"
-                )
-            if not 0.0 <= self.fail_under <= 1.0:
-                raise ConfigurationError(
-                    f"fail_under must be between 0.0 and 1.0, got {self.fail_under}"
-                )
+            _validate_unit_interval("fail_under", self.fail_under)
 
         # Validate domain_file exists if specified
         if self.domain_file is not None:
@@ -104,32 +102,13 @@ class Config:
             if not path.exists():
                 raise ConfigurationError(f"Domain file not found: {self.domain_file}")
             if not path.is_file():
-                raise ConfigurationError(
-                    f"Domain file path is not a file: {self.domain_file}"
-                )
+                raise ConfigurationError(f"Domain file path is not a file: {self.domain_file}")
 
-        # Validate domain_terms is a list of strings
-        if not isinstance(self.domain_terms, list):
-            raise ConfigurationError("domain_terms must be a list")
-        for term in self.domain_terms:
-            if not isinstance(term, str):
-                raise ConfigurationError(
-                    f"All domain_terms must be strings, got {type(term).__name__}"
-                )
-
-        # Validate additional_weasels is a list of strings
-        if not isinstance(self.additional_weasels, list):
-            raise ConfigurationError("additional_weasels must be a list")
-        for weasel in self.additional_weasels:
-            if not isinstance(weasel, str):
-                raise ConfigurationError(
-                    f"All additional_weasels must be strings, got {type(weasel).__name__}"
-                )
+        _validate_str_list("domain_terms", self.domain_terms)
+        _validate_str_list("additional_weasels", self.additional_weasels)
 
     @classmethod
-    def from_file(
-        cls, path: Path | str, overrides: Optional[dict] = None
-    ) -> "Config":
+    def from_file(cls, path: Path | str, overrides: dict | None = None) -> "Config":
         """Load configuration from a YAML file.
 
         Args:
@@ -152,7 +131,7 @@ class Config:
             with path.open() as f:
                 data = yaml.safe_load(f) or {}
         except yaml.YAMLError as e:
-            raise ConfigurationError(f"Invalid YAML in configuration file: {e}")
+            raise ConfigurationError(f"Invalid YAML in configuration file: {e}") from e
 
         if not isinstance(data, dict):
             raise ConfigurationError(
@@ -169,7 +148,7 @@ class Config:
         try:
             return cls(output=output_config, **data)
         except TypeError as e:
-            raise ConfigurationError(f"Unknown configuration option: {e}")
+            raise ConfigurationError(f"Unknown configuration option: {e}") from e
 
     def get_level_thresholds(self) -> dict:
         """Get thresholds based on the configured level.

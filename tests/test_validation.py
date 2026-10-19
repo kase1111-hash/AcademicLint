@@ -108,9 +108,7 @@ class TestValidateFilePath:
     def test_nonexistent_file_must_exist_false(self):
         """Test that nonexistent file with must_exist=False doesn't raise."""
         # This should not raise even if file doesn't exist
-        result = validate_file_path(
-            "/some/path/file.txt", must_exist=False, check_extension=True
-        )
+        result = validate_file_path("/some/path/file.txt", must_exist=False, check_extension=True)
         assert result is not None
 
     def test_unsupported_extension(self):
@@ -141,9 +139,11 @@ class TestValidateFilePath:
 
     def test_directory_raises_error(self):
         """Test that directory path raises error."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            with pytest.raises(ValidationError, match="not a file"):
-                validate_file_path(tmpdir)
+        with (
+            tempfile.TemporaryDirectory() as tmpdir,
+            pytest.raises(ValidationError, match="not a file"),
+        ):
+            validate_file_path(tmpdir)
 
     def test_accepts_path_object(self):
         """Test that Path object is accepted."""

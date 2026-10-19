@@ -55,7 +55,7 @@ class TerminalFormatter(Formatter):
         lines = []
 
         # Flag type and term
-        lines.append(f"  {prefix} FLAG: \"{flag.term}\" → {flag.type.value}")
+        lines.append(f'  {prefix} FLAG: "{flag.term}" → {flag.type.value}')
 
         # Message
         lines.append(f"  │   {flag.message}")

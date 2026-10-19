@@ -5,16 +5,15 @@ for analysis results.
 """
 
 import json
-import re
 
 import pytest
 
-from academiclint import Config, Linter, AnalysisResult
+from academiclint import Config, Linter
 from academiclint.formatters import (
-    TerminalFormatter,
+    GitHubFormatter,
     JSONFormatter,
     MarkdownFormatter,
-    GitHubFormatter,
+    TerminalFormatter,
 )
 
 from .sample_texts import BAD_TEXT_VAGUE, GOOD_TEXT_PRECISE
@@ -120,8 +119,11 @@ class TestMarkdownFormatterPipeline:
         output = formatter.format(bad_result)
 
         # Should have some summary info
-        assert "density" in output.lower() or "summary" in output.lower() or \
-               str(bad_result.summary.flag_count) in output
+        assert (
+            "density" in output.lower()
+            or "summary" in output.lower()
+            or str(bad_result.summary.flag_count) in output
+        )
 
     def test_markdown_lists_flags(self, bad_result):
         """Markdown should list flags."""
@@ -159,8 +161,11 @@ class TestTerminalFormatterPipeline:
         output = formatter.format(bad_result)
 
         # Should mention flags or issues
-        assert "flag" in output.lower() or str(bad_result.summary.flag_count) in output or \
-               "issue" in output.lower()
+        assert (
+            "flag" in output.lower()
+            or str(bad_result.summary.flag_count) in output
+            or "issue" in output.lower()
+        )
 
 
 class TestGitHubFormatterPipeline:
@@ -173,8 +178,12 @@ class TestGitHubFormatterPipeline:
 
         if bad_result.summary.flag_count > 0:
             # GitHub annotations use ::warning:: or ::error:: format
-            assert "::" in output or "warning" in output.lower() or "error" in output.lower() or \
-                   output.strip()  # May be empty if no actionable items
+            assert (
+                "::" in output
+                or "warning" in output.lower()
+                or "error" in output.lower()
+                or output.strip()
+            )  # May be empty if no actionable items
 
     def test_github_includes_file_info(self, linter):
         """GitHub output should include file information when available."""
@@ -227,11 +236,14 @@ class TestFormatterConsistency:
     def test_formatters_handle_many_flags(self, linter):
         """All formatters should handle results with many flags."""
         # Text designed to produce many flags
-        problematic_text = """
+        problematic_text = (
+            """
         In today's society, many experts believe that some research suggests
         things have changed. Studies show 75% of people agree. It is clear
         that freedom is the state of being free. Social media causes problems.
-        """ * 5
+        """
+            * 5
+        )
 
         result = linter.check(problematic_text)
 

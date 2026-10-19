@@ -1,6 +1,7 @@
 """Circular definition detector for AcademicLint."""
 
 import re
+from typing import ClassVar
 
 from academiclint.core.config import Config
 from academiclint.core.pipeline import ProcessedDocument
@@ -13,7 +14,7 @@ class CircularDetector(Detector):
 
     # Patterns for definition structures
     # Each pattern should have two groups: (1) the term being defined, (2) the definition
-    DEFINITION_PATTERNS = [
+    DEFINITION_PATTERNS: ClassVar[list[str]] = [
         # "X is/are Y" - basic definition
         r"(\w+)\s+(?:is|are|means?|refers?\s+to)\s+(?:(?:a|an|the)\s+)?(.*)",
         # "X: Y" - colon definition (e.g., "Freedom: the state of being free")
@@ -92,9 +93,7 @@ class CircularDetector(Detector):
                 return True
             # Prefix match: handles cases like justice/just, democracy/democr
             if len(term_root) >= 4 and len(word_root) >= 4:
-                shorter, longer = sorted(
-                    [term_root, word_root], key=len
-                )
+                shorter, longer = sorted([term_root, word_root], key=len)
                 if longer.startswith(shorter):
                     return True
 
@@ -108,11 +107,35 @@ class CircularDetector(Detector):
         """
         # Ordered longest-first so "ization" matches before "tion"
         suffixes = [
-            "ization", "isation", "ological", "ically",
-            "ation", "ition", "ness", "ment", "tion", "sion",
-            "ible", "able", "ical", "atic", "ious", "eous",
-            "ive", "ity", "dom", "ism", "ist", "ful",
-            "ing", "ed", "er", "est", "ly", "al", "ic",
+            "ization",
+            "isation",
+            "ological",
+            "ically",
+            "ation",
+            "ition",
+            "ness",
+            "ment",
+            "tion",
+            "sion",
+            "ible",
+            "able",
+            "ical",
+            "atic",
+            "ious",
+            "eous",
+            "ive",
+            "ity",
+            "dom",
+            "ism",
+            "ist",
+            "ful",
+            "ing",
+            "ed",
+            "er",
+            "est",
+            "ly",
+            "al",
+            "ic",
         ]
 
         root = word

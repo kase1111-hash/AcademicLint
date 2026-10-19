@@ -1,9 +1,6 @@
 """Tests for configuration handling."""
 
 import tempfile
-from pathlib import Path
-
-import pytest
 
 from academiclint.core.config import Config, OutputConfig
 

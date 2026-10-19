@@ -34,7 +34,7 @@ class TestCausalDetector:
                 if not self.sentences:
                     return None
                 for sent in self.sentences:
-                    if hasattr(sent, 'span') and sent.span.start <= start and end <= sent.span.end:
+                    if hasattr(sent, "span") and sent.span.start <= start and end <= sent.span.end:
                         return sent
                 return None
 
@@ -62,7 +62,7 @@ class TestCausalDetector:
                 if not self.sentences:
                     return None
                 for sent in self.sentences:
-                    if hasattr(sent, 'span') and sent.span.start <= start and end <= sent.span.end:
+                    if hasattr(sent, "span") and sent.span.start <= start and end <= sent.span.end:
                         return sent
                 return None
 
@@ -86,7 +86,7 @@ class TestCausalDetector:
                 if not self.sentences:
                     return None
                 for sent in self.sentences:
-                    if hasattr(sent, 'span') and sent.span.start <= start and end <= sent.span.end:
+                    if hasattr(sent, "span") and sent.span.start <= start and end <= sent.span.end:
                         return sent
                 return None
 

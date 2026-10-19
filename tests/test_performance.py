@@ -23,10 +23,10 @@ import pytest
 from academiclint import Config, Linter
 from academiclint.core.result import AnalysisResult
 
-
 # =============================================================================
 # Test Fixtures
 # =============================================================================
+
 
 @pytest.fixture
 def linter():
@@ -78,6 +78,7 @@ def sample_document():
 # =============================================================================
 # Load Tests - Normal Expected Usage
 # =============================================================================
+
 
 class TestLoadNormalUsage:
     """Load tests simulating normal expected usage patterns."""
@@ -160,6 +161,7 @@ class TestLoadNormalUsage:
 # Stress Tests - Extreme Conditions
 # =============================================================================
 
+
 class TestStressExtreme:
     """Stress tests for extreme conditions."""
 
@@ -189,7 +191,7 @@ class TestStressExtreme:
     def test_very_long_single_paragraph(self, linter):
         """Very long single paragraph should be handled."""
         # 1000 sentences in one paragraph
-        text = " ".join(["This is sentence number {}.".format(i) for i in range(1000)])
+        text = " ".join([f"This is sentence number {i}." for i in range(1000)])
 
         result = linter.check(text)
 
@@ -234,12 +236,15 @@ class TestStressExtreme:
     def test_high_flag_density_text(self, linter):
         """Text with many potential flags should be handled."""
         # Text designed to trigger many detectors
-        problematic = """
+        problematic = (
+            """
         In today's society, many experts believe freedom is being free.
         Studies show this causes significant changes throughout history.
         It is clear that various factors have had impacts on things.
         Many people think some aspects are important for reasons.
-        """ * 10
+        """
+            * 10
+        )
 
         result = linter.check(problematic)
 
@@ -251,6 +256,7 @@ class TestStressExtreme:
 # =============================================================================
 # Benchmark Tests - Timing Measurements
 # =============================================================================
+
 
 class TestBenchmarks:
     """Benchmark tests for performance tracking."""
@@ -338,6 +344,7 @@ class TestBenchmarks:
 # Scalability Tests - Performance vs Input Size
 # =============================================================================
 
+
 class TestScalability:
     """Tests for how performance scales with input size."""
 
@@ -357,7 +364,7 @@ class TestScalability:
         if times[0] > 0:
             ratio_1_to_2 = times[1] / times[0]
             size_ratio = sizes[1] / sizes[0]
-            assert ratio_1_to_2 < size_ratio ** 2.5, "Poor scaling detected"
+            assert ratio_1_to_2 < size_ratio**2.5, "Poor scaling detected"
 
     def test_paragraph_count_scaling(self, linter):
         """Processing time should scale reasonably with paragraph count."""
@@ -388,11 +395,11 @@ class TestScalability:
         problematic = "Many experts believe things changed significantly. " * 20
 
         start = time.perf_counter()
-        clean_result = linter.check(clean)
+        linter.check(clean)
         clean_time = time.perf_counter() - start
 
         start = time.perf_counter()
-        prob_result = linter.check(problematic)
+        linter.check(problematic)
         prob_time = time.perf_counter() - start
 
         # Problematic text shouldn't take more than 5x longer
@@ -404,6 +411,7 @@ class TestScalability:
 # =============================================================================
 # Concurrency Tests - Parallel Processing
 # =============================================================================
+
 
 class TestConcurrency:
     """Tests for concurrent/parallel processing behavior."""
@@ -418,7 +426,7 @@ class TestConcurrency:
         ]
 
         results = []
-        for linter, text in zip(linters, texts):
+        for linter, text in zip(linters, texts, strict=True):
             results.append(linter.check(text))
 
         assert len(results) == 3
@@ -455,6 +463,7 @@ class TestConcurrency:
 # Memory Tests - Resource Usage
 # =============================================================================
 
+
 class TestMemoryUsage:
     """Tests for memory usage patterns."""
 
@@ -478,11 +487,14 @@ class TestMemoryUsage:
     def test_large_result_handling(self, linter):
         """Large results should be handled without issues."""
         # Generate text that produces many flags
-        text = """
+        text = (
+            """
         In today's society, many experts believe various things
         have changed significantly throughout history. It is clear
         that freedom is the state of being free. Studies show this.
-        """ * 20
+        """
+            * 20
+        )
 
         result = linter.check(text)
 
@@ -510,6 +522,7 @@ class TestMemoryUsage:
 # =============================================================================
 # Configuration Performance Tests
 # =============================================================================
+
 
 class TestConfigurationPerformance:
     """Tests for performance with different configurations."""
@@ -558,6 +571,7 @@ class TestConfigurationPerformance:
 # =============================================================================
 # Performance Regression Markers
 # =============================================================================
+
 
 class TestPerformanceBaselines:
     """

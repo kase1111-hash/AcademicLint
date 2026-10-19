@@ -16,7 +16,6 @@ Usage:
 
 import logging
 import sys
-from typing import Optional
 
 # Default format strings
 FORMATS = {
@@ -34,7 +33,7 @@ def setup_logging(
     level: str = "WARNING",
     format: str = "simple",
     output: str = "stderr",
-    filename: Optional[str] = None,
+    filename: str | None = None,
 ) -> None:
     """Configure logging for AcademicLint.
 
@@ -61,6 +60,7 @@ def setup_logging(
     _package_logger.handlers.clear()
 
     # Create handler based on output type
+    handler: logging.Handler
     if output == "file" and filename:
         handler = logging.FileHandler(filename)
     elif output == "stdout":

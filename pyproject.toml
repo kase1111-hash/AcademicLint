@@ -50,7 +50,6 @@ dev = [
     "ruff>=0.1.0",
     "pre-commit>=3.0.0",
     "bandit>=1.7.0",
-    "safety>=2.3.0",
     "pip-audit>=2.6.0",
     "types-PyYAML>=6.0.0",
 ]
@@ -124,11 +123,14 @@ ignore = [
     "E501",   # line too long (handled by formatter)
     "S101",   # assert usage (ok in tests)
     "PLR0913", # too many arguments
+    "PLR0917", # too many positional arguments (same policy as PLR0913)
     "PLR2004", # magic value comparison
+    "PLC0415", # import outside top level (lazy loading of spaCy/detectors is by design)
+    "RUF022", # unsorted __all__ (exports are grouped by category, not sorted)
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**/*.py" = ["S101", "S105", "S106", "PLR2004"]
+"tests/**/*.py" = ["S101", "S105", "S106", "PLR2004", "RUF001"]  # RUF001: unicode test inputs
 "src/academiclint/cli/**/*.py" = ["T20"]
 
 [tool.ruff.lint.isort]

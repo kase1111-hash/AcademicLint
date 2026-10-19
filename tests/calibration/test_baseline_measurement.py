@@ -9,9 +9,9 @@ import pytest
 
 spacy = pytest.importorskip("spacy", reason="spaCy required for baseline measurement")
 
-from academiclint import Config, Linter
-from academiclint.core.result import FlagType
-from tests.fixtures.real_papers import ALL_ABSTRACTS, BAD_WRITING_SAMPLES
+from academiclint import Config, Linter  # noqa: E402
+from academiclint.core.result import FlagType  # noqa: E402
+from tests.fixtures.real_papers import ALL_ABSTRACTS, BAD_WRITING_SAMPLES  # noqa: E402
 
 
 @pytest.fixture(scope="module")
@@ -71,8 +71,7 @@ class TestBaselineBadWriting:
         """Vague essay should produce multiple vagueness flags."""
         result = linter.check(BAD_WRITING_SAMPLES["vague_essay"])
         vague_flags = [
-            f for f in result.flags
-            if f.type in (FlagType.UNDERSPECIFIED, FlagType.FILLER)
+            f for f in result.flags if f.type in (FlagType.UNDERSPECIFIED, FlagType.FILLER)
         ]
         assert len(vague_flags) >= 3, (
             f"Only {len(vague_flags)} vagueness/filler flags on intentionally vague text"

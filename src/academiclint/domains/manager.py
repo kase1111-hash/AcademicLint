@@ -1,7 +1,7 @@
 """Domain management for AcademicLint."""
 
 from pathlib import Path
-from typing import Optional
+from typing import ClassVar
 
 from academiclint.domains.loader import load_domain
 
@@ -9,13 +9,13 @@ from academiclint.domains.loader import load_domain
 class DomainManager:
     """Manages domain vocabularies and settings."""
 
-    BUILTIN_DOMAINS = {
+    BUILTIN_DOMAINS: ClassVar[set[str]] = {
         "philosophy",
         "computer-science",
     }
 
     def __init__(self):
-        self._loaded_domains: dict = {}
+        self._loaded_domains: dict[str, dict] = {}
         self._builtin_path = Path(__file__).parent / "builtin"
 
     def get_domain(self, name: str) -> dict:
@@ -30,11 +30,8 @@ class DomainManager:
         if name in self._loaded_domains:
             return self._loaded_domains[name]
 
-        if name in self.BUILTIN_DOMAINS:
-            domain = self._load_builtin(name)
-        else:
-            # Try loading as a file path
-            domain = load_domain(name)
+        # Anything that isn't a built-in name is loaded as a file path
+        domain = self._load_builtin(name) if name in self.BUILTIN_DOMAINS else load_domain(name)
 
         self._loaded_domains[name] = domain
         return domain
@@ -74,7 +71,7 @@ class DomainManager:
 
         return domains
 
-    def get_terms(self, domain_name: Optional[str]) -> set[str]:
+    def get_terms(self, domain_name: str | None) -> set[str]:
         """Get all technical terms for a domain.
 
         Args:

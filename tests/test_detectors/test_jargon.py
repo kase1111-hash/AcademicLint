@@ -27,7 +27,7 @@ class MockDoc:
 
     def get_sentence_for_span(self, start, end):
         for sent in self.sentences:
-            if hasattr(sent, 'span') and sent.span.start <= start and end <= sent.span.end:
+            if hasattr(sent, "span") and sent.span.start <= start and end <= sent.span.end:
                 return sent
         return None
 

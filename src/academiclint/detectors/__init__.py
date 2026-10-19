@@ -11,15 +11,15 @@ from academiclint.detectors.vagueness import VaguenessDetector
 from academiclint.detectors.weasel import WeaselDetector
 
 __all__ = [
-    "Detector",
-    "VaguenessDetector",
     "CausalDetector",
     "CircularDetector",
-    "WeaselDetector",
+    "CitationDetector",
+    "Detector",
+    "FillerDetector",
     "HedgeDetector",
     "JargonDetector",
-    "CitationDetector",
-    "FillerDetector",
+    "VaguenessDetector",
+    "WeaselDetector",
     "get_all_detectors",
 ]
 

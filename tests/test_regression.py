@@ -12,17 +12,17 @@ Organization:
 """
 
 import tempfile
-from pathlib import Path
 
 import pytest
 
 from academiclint import Config, Linter
+from academiclint.core.exceptions import ValidationError
 from academiclint.core.result import AnalysisResult, FlagType, Severity
-
 
 # =============================================================================
 # Edge Cases and Boundary Conditions
 # =============================================================================
+
 
 class TestEdgeCases:
     """Tests for edge cases and boundary conditions."""
@@ -76,9 +76,7 @@ class TestEdgeCases:
 
     def test_text_with_urls(self):
         """Text containing URLs should be handled."""
-        result = Linter().check(
-            "Visit https://example.com/path?query=1 for more info."
-        )
+        result = Linter().check("Visit https://example.com/path?query=1 for more info.")
         assert isinstance(result, AnalysisResult)
 
     def test_text_with_emails(self):
@@ -157,6 +155,7 @@ class TestBoundaryConditions:
 # Known Problematic Inputs
 # =============================================================================
 
+
 class TestProblematicInputs:
     """Tests for inputs known to be problematic."""
 
@@ -198,7 +197,7 @@ class TestProblematicInputs:
 
     def test_nested_quotes(self):
         """Nested quotes should be handled."""
-        result = Linter().check('He said "she said \'hello\' to me".')
+        result = Linter().check("He said \"she said 'hello' to me\".")
         assert isinstance(result, AnalysisResult)
 
     def test_unbalanced_parentheses(self):
@@ -242,6 +241,7 @@ class TestProblematicInputs:
 # =============================================================================
 # Behavior Preservation Tests
 # =============================================================================
+
 
 class TestBehaviorPreservation:
     """Tests ensuring specific behaviors are preserved."""
@@ -353,6 +353,7 @@ class TestBehaviorPreservation:
 # =============================================================================
 # Previously Fixed Bugs (Documented)
 # =============================================================================
+
 
 class TestPreviouslyFixedBugs:
     """
@@ -503,6 +504,7 @@ class TestPreviouslyFixedBugs:
 # Performance Regression Guards
 # =============================================================================
 
+
 class TestPerformanceRegression:
     """Tests to guard against performance regressions."""
 
@@ -540,14 +542,13 @@ class TestPerformanceRegression:
 # File Handling Regression Tests
 # =============================================================================
 
+
 class TestFileHandlingRegression:
     """Tests for file handling regressions."""
 
     def test_file_with_bom(self):
         """Files with BOM should be handled."""
-        with tempfile.NamedTemporaryFile(
-            mode="wb", suffix=".txt", delete=False
-        ) as f:
+        with tempfile.NamedTemporaryFile(mode="wb", suffix=".txt", delete=False) as f:
             # Write UTF-8 BOM + content
             f.write(b"\xef\xbb\xbfTest content here.")
             f.flush()
@@ -570,30 +571,27 @@ class TestFileHandlingRegression:
 
     def test_empty_file(self):
         """Empty files should raise appropriate error."""
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".txt", delete=False
-        ) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
             f.write("")
             f.flush()
 
-            with pytest.raises(Exception):  # ValidationError or similar
+            with pytest.raises(ValidationError):
                 Linter().check_file(f.name)
 
     def test_file_only_whitespace(self):
         """Files with only whitespace should raise error."""
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".txt", delete=False
-        ) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
             f.write("   \n\n\t\t   ")
             f.flush()
 
-            with pytest.raises(Exception):
+            with pytest.raises(ValidationError):
                 Linter().check_file(f.name)
 
 
 # =============================================================================
 # Configuration Regression Tests
 # =============================================================================
+
 
 class TestConfigurationRegression:
     """Tests for configuration handling regressions."""
