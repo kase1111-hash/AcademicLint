@@ -194,7 +194,7 @@ def _mark_list_items(text: str) -> str:
     paragraph, so a wrapped line starting "2019. The..." stays text.
     """
     lines = text.split("\n")
-    in_list = False  # After a list item, up to the next blank line
+    in_list = False  # After a list item, up to the next unindented paragraph
     prev_blank = True
     for i, line in enumerate(lines):
         match = _BULLET.match(line) or _NUMBERED.match(line)
@@ -203,25 +203,38 @@ def _mark_list_items(text: str) -> str:
         if match:
             lines[i] = _item(match) + line[match.end() :]
             in_list = True
-        elif not line.strip():
+        elif line.strip() and not line[:1].isspace():
             in_list = False
         prev_blank = not line.strip()
     return "\n".join(lines)
 
 
-def _continues(prev: str, in_list: bool) -> bool:
-    """Whether a list item carries on the sentence of the line before it.
+# Words a lead-in clause can end with however short it is ("Research suggests that")
+_LEAD_IN_END = re.compile(
+    r"that|as|by|of|to|for|from|with|in|on|at|includ(?:e|es|ing)|are|is|were|was|be|such"
+    r"|like|whether|because|when|where",
+    re.IGNORECASE,
+)
 
-    It does after a comma, semicolon, "and" or "or" ("predicted by\n- a,\n-
-    b, and\n- c [12].") and after a lead-in clause without punctuation; a
-    new item after an unpunctuated item, after a lead-in ending "...groups:",
-    or after a short label ("Strengths", a setext underline) starts a sentence.
+
+def _continues(block: list[str], in_list: bool) -> bool:
+    """Whether a list item carries on the sentence of the lines before it.
+
+    block holds the lines since the last blank line or list item. An item
+    carries on after a comma, semicolon, "and" or "or" ("predicted by\n- a,\n-
+    b, and\n- c [12].") and after a lead-in clause without punctuation (which
+    may be wrapped over several lines). A new item after an unpunctuated item,
+    after a lead-in ending "...groups:", or after a label ("Strengths", a
+    caption, a setext underline) starts a sentence.
     """
-    prev = prev.rstrip()
+    prev = block[-1].rstrip()
     words = prev.split()
     if prev.endswith((",", ";")) or (words and words[-1].lower() in ("and", "or")):
         return True
-    return not in_list and len(words) >= 4 and not _LINE_END.search(prev)
+    if in_list or not words or _LINE_END.search(prev):
+        return False
+    clause = re.split(r"[.!?:]\s", " ".join(block))[-1].split()
+    return len(clause) >= 4 or bool(_LEAD_IN_END.fullmatch(clause[-1]))
 
 
 def _finish(text: str) -> ParsedText:
@@ -236,14 +249,22 @@ def _finish(text: str) -> ParsedText:
     out: list[str] = []
     source: list[int] = []
     in_list = False  # After a list item, up to the next blank line
+    block: list[str] = []  # Lines since the last blank line, heading or list item
     for number, raw in enumerate(lines, 1):
         line = raw
         if not line.strip():
             in_list = False
+            block = []
         elif _ITEM_START in line:
-            if out and out[-1].strip() and _continues(out[-1], in_list):
+            if block and _continues(block, in_list):
                 line = line.replace(_ITEM_START, " ")
             in_list = True
+            block = [line]
+        elif _HEADING_END in line:
+            in_list = False
+            block = []
+        else:
+            block.append(line)
         if _HEADING_END not in line:
             out.append(line)
             source.append(number)

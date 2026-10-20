@@ -117,6 +117,31 @@ class TestSourceLines:
 
         assert len(parsed.sentence_starts) == 2
 
+    @pytest.mark.parametrize(
+        ("source", "starts"),
+        [
+            # A lead-in wrapped over two lines carries on into the list
+            (
+                "Prior work is extensive, and several\nstudies show that\n- a holds [12],\n"
+                "- b holds [13], and\n- c holds [14].\n",
+                0,
+            ),
+            # A short lead-in clause too; the next item starts a new sentence
+            ("Research suggests that\n- a holds (Lee, 2021)\n- b holds (Kim, 2020)\n", 1),
+        ],
+    )
+    def test_list_after_lead_in_clause(self, source, starts):
+        assert len(markdown_to_text(source).sentence_starts) == starts
+
+    def test_loose_numbered_list(self):
+        """An indented paragraph inside an item doesn't end the list."""
+        parsed = markdown_to_text(
+            "1. Recruitment\n\n   Schools were contacted.\n2. Consent was given\n"
+        )
+
+        assert len(parsed.sentence_starts) == 2
+        assert "2." not in parsed.text
+
     def test_year_starting_a_wrapped_line_is_not_a_list(self):
         """As in CommonMark, only "1." can start a list inside a paragraph."""
         parsed = markdown_to_text("It was first reported by Smith in\n2019. Many experts agree.\n")

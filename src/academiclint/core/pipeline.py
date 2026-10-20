@@ -114,11 +114,14 @@ _CITATION_OR_REMINDER = "|".join(
 # A "sentence" holding nothing but those, e.g. "[12]."
 _CITATION_ONLY = re.compile(rf"(?:\s*(?:{_CITATION_OR_REMINDER}))+[\s.,;:!?]*")
 # A sentence opening with a bracketed citation, e.g. "[12], and others agree."
-_LEADING_CITATION = re.compile(rf"(?=[\[(\u27e6])(?:{_CITATION})")
+_LEADING_CITATION = re.compile(rf"(?=[\[(\u27e6])(?:{_CITATION_OR_REMINDER})")
 # The end of a sentence, before any citations or reminders that follow it
 _SENTENCE_END = re.compile(rf"[.!?][\"'\u201d\u2019)\]]*(?:\s*(?:{_CITATION_OR_REMINDER}))*\s*$")
-# The placeholder's closing bracket, which only the LaTeX parser writes
-_CITATION_CLOSE = CITATION_PLACEHOLDER[-1]
+# Closing brackets of a citation or reminder: after one and a full stop, a
+# capitalised word starts a sentence ("...instead [citation].\nResearch shows")
+_CITATION_CLOSE = (CITATION_PLACEHOLDER[-1], "]")
+# Penn Treebank tags of finite verbs
+_FINITE_VERB = frozenset({"VBD", "VBZ", "VBP", "MD"})
 
 
 class NLPPipeline:
@@ -295,8 +298,9 @@ class NLPPipeline:
         body sentence ("Johnson (2019) found..." -> "Johnson", "(", ...).
         A sentence is also split at each of `starts`, such as list items, which
         the parser runs together when they have no full stop, and after a
-        LaTeX citation that ends a sentence ("...instead [citation].\nResearch
-        shows..."), which the large model can run into the next one.
+        bracketed citation or reminder that ends a sentence ("...instead
+        [citation].\nResearch shows..."), which the parser can run into the
+        next one.
         """
         spans: list[Any] = []
         pending = sorted(starts)
@@ -322,13 +326,15 @@ class NLPPipeline:
                     forced = True
                     next_start += 1
                 offset = token.idx - sent.start_char
-                cited_end = before[0] == _CITATION_CLOSE and before[1] in (".", "!", "?")
                 if prev_end is None:
                     may_merge = not forced
                 elif (
                     forced
-                    or (cited_end and token.text[:1].isupper())
                     or "\n\n" in sent_text[prev_end:offset]
+                    or (
+                        token.text[:1].isupper()
+                        and NLPPipeline._cited_end(before, sent_text[prev_end:offset])
+                    )
                 ):
                     add(doc[start : token.i], may_merge)
                     start = token.i
@@ -337,6 +343,19 @@ class NLPPipeline:
                 before = (before[1], token.text)
             add(doc[start : sent.end], may_merge)
         return spans
+
+    @staticmethod
+    def _cited_end(before: tuple[str, str], gap: str) -> bool:
+        """Whether a citation or reminder in brackets ends the sentence there.
+
+        before holds the last two non-space tokens' text and gap the space
+        after them; the next word is capitalised. That is the case after
+        "...instead [citation]." and after a citation ending its line with no
+        full stop ("...accidents\n[citation needed]\nExperts agree...").
+        """
+        if before[0] in _CITATION_CLOSE and before[1] in (".", "!", "?"):
+            return True
+        return before[1] in _CITATION_CLOSE and "\n" in gap
 
     @staticmethod
     def _continues_with_citation(prev: Any, span: Any) -> bool:
@@ -365,12 +384,16 @@ class NLPPipeline:
         if not leading or _SENTENCE_END.search(doc[max(prev.start, end - 12) : end].text):
             return False
         if "\n" in doc[end - 1].whitespace_ + doc[end:start].text_with_ws:
-            # A citation opening a line may be the subject of a new one in an
-            # outline or list ("[3] reported that..."), not the claim's citation
+            # A citation opening a line may be the subject of a new clause in
+            # an outline ("...weekly\n[3] reported that..."): a finite verb
+            # straight after it, following a line that is a clause itself.
+            # Not "...in children\n[21], suggesting" or "Many researchers\n[12]
+            # argue that...", where the citation belongs to the sentence.
             after = doc[start].idx + leading.end()
-            for token in doc[start : span.end]:
-                if token.idx >= after and not (token.is_space or token.is_punct):
-                    return token.pos_ not in ("VERB", "AUX")
+            following = next((t for t in doc[start : span.end] if t.idx >= after), None)
+            if following is not None and following.tag_ in _FINITE_VERB:
+                before = doc[max(prev.start, end - 50) : end]
+                return not any(t.pos_ in ("VERB", "AUX") for t in before)
         return True
 
     @staticmethod

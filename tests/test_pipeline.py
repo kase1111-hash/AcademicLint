@@ -186,14 +186,61 @@ class TestCitationSplitOff:
             "[12] found more.",
         ]
 
+    @staticmethod
+    def tagged(*parts, **tags):
+        """presplit() with the given (pos, tag) set on words, as a tagger would."""
+        doc = presplit(*parts, sep="\n")
+        for token in doc:
+            if token.text in tags:
+                token.pos_, token.tag_ = tags[token.text]
+        return doc
+
     def test_citation_leading_a_clause_on_the_next_line(self):
         """In an outline, "[3] reported..." on its own line starts a new statement."""
-        doc = presplit(
-            "Most students procrastinate weekly", "[3] reported that it helps.", sep="\n"
+        doc = self.tagged(
+            "Most students procrastinate weekly",
+            "[3] reported that it helps.",
+            procrastinate=("VERB", "VBP"),
+            reported=("VERB", "VBD"),
         )
-        next(t for t in doc if t.text == "reported").pos_ = "VERB"
 
         assert len(self.sentences(doc)) == 2
+
+    @pytest.mark.parametrize(
+        ("claim", "rest", "tags"),
+        [
+            # A participle after the citation carries on the sentence
+            (
+                "Working memory predicts reading in children",
+                "[21] suggesting that it matters.",
+                {"predicts": ("VERB", "VBZ"), "suggesting": ("VERB", "VBG")},
+            ),
+            # A subject without a verb of its own takes the citation with it
+            ("Many researchers", "[12] argue that it matters.", {"argue": ("VERB", "VBP")}),
+        ],
+    )
+    def test_citation_carrying_on_the_line_before(self, claim, rest, tags):
+        doc = self.tagged(claim, rest, **tags)
+
+        assert len(self.sentences(doc)) == 1
+
+    def test_reminder_inside_a_sentence(self):
+        doc = presplit("Transformers outperform baselines", "[citation needed] on benchmarks.")
+
+        assert self.sentences(doc) == [
+            "Transformers outperform baselines [citation needed] on benchmarks."
+        ]
+
+    def test_split_after_bracketed_sentence_end(self):
+        """A reminder or citation, a full stop and a capital end the sentence."""
+        doc = presplit("Naps help [citation needed].\nMednick (2003) found more.")
+        line_end = presplit("Studies show that naps help\n[citation needed]\nExperts agree [12].")
+
+        assert self.sentences(doc) == ["Naps help [citation needed].", "Mednick (2003) found more."]
+        assert self.sentences(line_end) == [
+            "Studies show that naps help\n[citation needed]",
+            "Experts agree [12].",
+        ]
 
     def test_citation_after_a_blank_line(self):
         doc = presplit("Introduction", "[12].", sep="\n\n")

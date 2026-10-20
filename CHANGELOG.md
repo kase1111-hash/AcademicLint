@@ -76,6 +76,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A `<` in Markdown prose (e.g. "p < .001") was taken for an HTML tag and the
   text up to the next `>` was deleted; an escaped `\$` in LaTeX was taken for
   math (a `\\` line break before `$` still opens it)
+- An escaped `\%` in LaTeX was taken for a comment, so the rest of its line
+  was lost; a wrapped Markdown line starting with a year ("2019. ...") was
+  taken for a numbered list item and lost the year
 - A multi-line `\cite`/`\ref`/`\label` split its sentence, and a LaTeX section
   title containing a command (`\emph{...}`) was cut short
 - Domain terms joined by an apostrophe, slash, en dash or LaTeX `--` did not
