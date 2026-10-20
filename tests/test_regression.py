@@ -609,6 +609,20 @@ class TestPreviouslyFixedBugs:
         assert not [f for f in Linter().check_file(cited).flags if f.type in needs_citation]
         assert [f for f in Linter().check_file(uncited).flags if f.type in needs_citation]
 
+    def test_bug_citation_counted_as_jargon(self, tmp_path):
+        """
+        Bug: The word "citation" in the placeholder a LaTeX citation becomes
+        was counted as jargon, tipping cited sentences over the threshold.
+        Expected: Words inside a citation are not counted as jargon.
+        """
+        path = tmp_path / "paper.tex"
+        path.write_text(
+            "The data obviously shows that education causes success \\cite{smith2020}.\n",
+            encoding="utf-8",
+        )
+
+        assert not [f for f in Linter().check_file(path).flags if f.type == FlagType.JARGON_DENSE]
+
     def test_bug_unknown_domain_silently_ignored(self):
         """
         Bug: An unknown domain name was accepted without any error.

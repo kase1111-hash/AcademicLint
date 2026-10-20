@@ -87,3 +87,50 @@ class TestSentenceSplitting:
         result = Linter().check(self.HEADED)
 
         assert not [f for f in result.flags if f.type == FlagType.UNSUPPORTED_CAUSAL]
+
+
+def presplit(*parts, sep=" "):
+    """A Doc of the joined parts, with a sentence starting at each part.
+
+    Stands in for a parser's sentence boundaries, so the boundaries of a
+    particular model (e.g. the large one) can be tested with any model.
+    """
+    doc = spacy.blank("en")(sep.join(parts))
+    starts, offset = set(), 0
+    for part in parts:
+        starts.add(offset)
+        offset += len(part) + len(sep)
+    for token in doc:
+        token.is_sent_start = token.idx in starts
+    return doc
+
+
+class TestCitationSplitOff:
+    """A citation the parser splits off its claim is merged back into it."""
+
+    @staticmethod
+    def sentences(doc):
+        return [span.text.strip() for span in NLPPipeline._sentence_spans(doc)]
+
+    @pytest.mark.parametrize("citation", ["[12].", "[citation].", "[Smith 2019].", "[1, 2]."])
+    def test_citation_only_sentence(self, citation):
+        doc = presplit("Studies show that sleep loss impairs recall", citation)
+
+        assert self.sentences(doc) == [f"Studies show that sleep loss impairs recall {citation}"]
+
+    def test_sentence_continuing_after_citation(self):
+        doc = presplit("Many experts agree that sleep matters", "[12], and others agree.")
+
+        assert self.sentences(doc) == [
+            "Many experts agree that sleep matters [12], and others agree."
+        ]
+
+    def test_citation_opening_a_new_sentence(self):
+        doc = presplit("It is known.", "[12] Many experts agree.")
+
+        assert self.sentences(doc) == ["It is known.", "[12] Many experts agree."]
+
+    def test_citation_after_a_blank_line(self):
+        doc = presplit("Introduction", "[12].", sep="\n\n")
+
+        assert self.sentences(doc) == ["Introduction", "[12]."]

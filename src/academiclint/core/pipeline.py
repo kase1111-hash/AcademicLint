@@ -1,11 +1,13 @@
 """NLP processing pipeline for AcademicLint."""
 
 import logging
+import re
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
 from academiclint.core.exceptions import ModelLoadError, ModelNotFoundError, ProcessingError
 from academiclint.core.result import Span
+from academiclint.utils.patterns import CITATION_PATTERNS
 
 logger = logging.getLogger(__name__)
 
@@ -100,6 +102,14 @@ DEFAULT_MODEL = "en_core_web_lg"
 # is preferred, but the smaller ones work for every detector (none rely on
 # word vectors), so a lighter install is still usable.
 FALLBACK_MODELS = ("en_core_web_lg", "en_core_web_md", "en_core_web_sm")
+
+
+_CITATION = "|".join(f"(?:{pattern})" for pattern in CITATION_PATTERNS)
+# A "sentence" holding nothing but citations, e.g. "[12]."
+_CITATION_ONLY = re.compile(rf"(?:\s*(?:{_CITATION}))+[\s.,;:!?]*")
+# A sentence opening with a bracketed citation, e.g. "[12], and others agree."
+_LEADING_CITATION = re.compile(rf"(?=[\[(])(?:{_CITATION})")
+_SENTENCE_END = re.compile(r"[.!?][\"'\u201d\u2019)\]]*$")
 
 
 class NLPPipeline:
@@ -273,7 +283,14 @@ class NLPPipeline:
         before the parser instead makes the small English model mis-split the
         body sentence ("Johnson (2019) found..." -> "Johnson", "(", ...).
         """
-        spans = []
+        spans: list[Any] = []
+
+        def add(span: Any) -> None:
+            if spans and NLPPipeline._continues_with_citation(spans[-1], span):
+                spans[-1] = doc[spans[-1].start : span.end]
+            else:
+                spans.append(span)
+
         for sent in doc.sents:
             sent_text = sent.text  # Span.text is rebuilt on every access
             start = sent.start
@@ -283,11 +300,37 @@ class NLPPipeline:
                     continue
                 offset = token.idx - sent.start_char
                 if prev_end is not None and "\n\n" in sent_text[prev_end:offset]:
-                    spans.append(doc[start : token.i])
+                    add(doc[start : token.i])
                     start = token.i
                 prev_end = offset + len(token.text)
-            spans.append(doc[start : sent.end])
+            add(doc[start : sent.end])
         return spans
+
+    @staticmethod
+    def _continues_with_citation(prev: Any, span: Any) -> bool:
+        """Whether span is a citation the parser split off the sentence before.
+
+        The large English model ends a sentence before a bracket, so
+        "... impairs recall [12]." becomes "... impairs recall" and "[12].",
+        and detectors looking for a citation in the claim's sentence miss it.
+        """
+        doc = span.doc
+        end = prev.end  # End of prev's content
+        while end > prev.start and doc[end - 1].is_space:
+            end -= 1
+        start = span.start  # Start of span's content
+        while start < span.end and doc[start].is_space:
+            start += 1
+        if end == prev.start or start == span.end:
+            return False
+        # Only the tokens at the boundary are read: prev grows with each merge
+        if "\n\n" in doc[end - 1].whitespace_ + doc[end:start].text_with_ws:
+            return False
+        text = doc[start : span.end].text
+        if _CITATION_ONLY.fullmatch(text):
+            return True
+        prev_tail = doc[max(prev.start, end - 4) : end].text
+        return bool(_LEADING_CITATION.match(text)) and not _SENTENCE_END.search(prev_tail)
 
     @staticmethod
     def _build_sentence(sent: Any) -> Sentence | None:

@@ -62,6 +62,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - LaTeX citations were never recognised: `\cite{...}` became a placeholder no
   citation check matched, and `\citep`/`\parencite`/... were deleted, so every
   cited claim was flagged as needing a citation
+- With `en_core_web_lg`, a bracketed citation after a claim ("... impairs
+  recall [12].") was split off into a sentence of its own, so the claim was
+  still flagged as needing a citation
+- Words inside a citation ("[citation]", "(Richardson, 2017)") counted as
+  jargon
 - A `<` in Markdown prose (e.g. "p < .001") was taken for an HTML tag and the
   text up to the next `>` was deleted; an escaped `\$` in LaTeX was taken for
   math
