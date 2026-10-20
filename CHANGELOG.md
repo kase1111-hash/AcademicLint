@@ -23,13 +23,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   file's `output.format`, `output.color` and `fail_under` are now honoured
 - Expected errors (bad input, bad config, missing model) print a one-line
   message and exit with code 1 instead of a traceback
-- `--sections` prints a warning that it is not supported yet
+- Files are checked independently: a file that cannot be analyzed is reported
+  by name and the run continues (exit code 1 at the end); files without text
+  found while expanding a directory are skipped with a warning
+- `--sections` (or `sections:` in a config file) prints a warning that section
+  filtering is not supported yet
+- Reported line numbers for Markdown and LaTeX files (e.g. GitHub annotations)
+  refer to the source file rather than the extracted text
+- A heading directly followed by text is analyzed as a paragraph of its own
+- `ModelLoadError` (a `ProcessingError`) is raised when spaCy or an installed
+  model fails to load; the CLI stops once instead of failing every file
+- A domain file's `parent` path is resolved relative to that file
 
 ### Fixed
 - Text with leading whitespace lost its first sentence: 0 words and density 0.0
   for the first paragraph, and anchored patterns never matched it
 - Sentences ran across blank lines (e.g. a Markdown heading into body text),
   giving the body paragraph 0 words and density 0.0
+- Markdown list markers, block quotes and headings consumed the preceding blank
+  line, merging paragraphs; `.markdown` files were not parsed as Markdown
 - Flags starting in leading whitespace were dropped from `result.flags`
 - Causal and weasel patterns matched across paragraphs (a "Results" heading
   followed by "In ..." was flagged as "results in")
@@ -38,11 +50,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   could be flagged twice
 - Whitespace-only input is rejected with `ValidationError`
 - `--domain` and `--domain-file` were ignored; unknown domains are now an error
-- `--quiet` had no effect; `check -` (stdin) was rejected
+- Multi-word and hyphenated domain terms (e.g. "machine learning",
+  "cross-validation") never exempted jargon
+- `--domain-file philosophy` read the built-in domain instead of the file
+- Malformed config and domain files (non-mapping `output`, unknown output
+  keys, values of the wrong type, non-UTF-8 text, empty or non-list term
+  lists, a domain that inherits from itself) crashed with a traceback
+- Non-UTF-8 stdin crashed with a traceback; so did text longer than spaCy
+  accepts, which also stopped the remaining files
+- A Markdown heading ending in '#' lost it ("C#" became "C")
+- LaTeX citations were never recognised: `\cite{...}` became a placeholder no
+  citation check matched, and `\citep`/`\parencite`/... were deleted, so every
+  cited claim was flagged as needing a citation. Citations now become
+  `⟦citation⟧`, which a "[citation]" reminder typed in a draft can't be
+  mistaken for, and one placed after the punctuation (`claim.\footcite{...}`)
+  no longer joins its sentence to the next
+- With `en_core_web_lg`, a bracketed citation after a claim ("... impairs
+  recall [12].") was split off into a sentence of its own, so the claim was
+  still flagged as needing a citation
+- Words inside a citation ("(Richardson, 2017)", the LaTeX placeholder) or a
+  "[citation needed]" reminder counted as jargon
+- List items without a full stop ran into one sentence, so a citation in one
+  item covered the claims in the others; each item now starts a sentence,
+  unless it carries on the sentence before it ("predicted by\n- a,\n- b")
+- A `<` in Markdown prose (e.g. "p < .001") was taken for an HTML tag and the
+  text up to the next `>` was deleted; an escaped `\$` in LaTeX was taken for
+  math (a `\\` line break before `$` still opens it)
+- An escaped `\%` in LaTeX was taken for a comment, so the rest of its line
+  was lost; a wrapped Markdown line starting with a year ("2019. ...") was
+  taken for a numbered list item and lost the year
+- A multi-line `\cite`/`\ref`/`\label` split its sentence, and a LaTeX section
+  title containing a command (`\emph{...}`) was cut short
+- Domain terms joined by an apostrophe, slash, en dash or LaTeX `--` did not
+  match their own spelling, while "machine, learning" matched "machine
+  learning"
+- `--quiet` had no effect (terminal and Markdown output); `check -` (stdin) was
+  rejected
 - GitHub output broke on newlines in messages and ignored `--min-density`
 - `setup` ran `python -m spacy download`, which could use a different
   interpreter than academiclint; it now uses the running interpreter
 - Reading stdin used `click.get_text_stream`, removed in Click 9
+- Config, domain and `.env` files, `-o` output and redirected stdout used the
+  platform's default encoding instead of UTF-8 (broke on Windows); a `.env`
+  file starting with a byte-order mark lost its first variable
 
 ### Removed
 - `safety` dev dependency (unused; `pip-audit` covers dependency scanning)

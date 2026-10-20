@@ -63,6 +63,13 @@ CITATION_PATTERNS = [
     r"[A-Z][a-z]+\s+\(\d{4}\)",  # Author (2023)
     r"\[\d+(?:,\s*\d+)*\]",  # [1] or [1, 2, 3]
     r"\[[\w\s,]+\d{4}\]",  # [Author 2023]
+    r"\u27e6citation\u27e7",  # What the LaTeX parser makes of \cite{...}
+]
+
+# Reminders typed where a source is still missing. Not citations, but not
+# prose either: their words are not jargon, and the parser may split them off.
+CITATION_REMINDERS = [
+    r"(?i:\[citation(?: needed)?\])",
 ]
 
 # Weasel word patterns

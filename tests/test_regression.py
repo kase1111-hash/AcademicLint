@@ -532,6 +532,200 @@ class TestPreviouslyFixedBugs:
         assert not [f for f in with_domain.flags if f.type == FlagType.JARGON_DENSE]
         assert config.domain_terms == []
 
+    def test_bug_multi_word_domain_terms_ignored(self):
+        """
+        Bug: Jargon was checked word by word, so multi-word domain terms such
+        as "machine learning" never exempted anything.
+        Expected: Words covered by a multi-word domain term are not jargon.
+        """
+        text = "Neural network training with machine learning requires memory allocation."
+        config = Config(domain_terms=["neural network", "machine learning", "memory allocation"])
+
+        plain = Linter().check(text)
+        with_terms = Linter(config).check(text)
+
+        assert [f for f in plain.flags if f.type == FlagType.JARGON_DENSE]
+        assert not [f for f in with_terms.flags if f.type == FlagType.JARGON_DENSE]
+
+    def test_bug_hyphenated_domain_terms_ignored(self):
+        """
+        Bug: Domain terms were split on whitespace only, so "cross-validation"
+        never matched the words the text was tokenized into.
+        Expected: Hyphenated terms exempt their words, written either way.
+        """
+        text = "We tuned hyper-parameter search using cross validation and early-stopping regularization."
+        config = Config(domain_terms=["hyper-parameter", "cross-validation", "early-stopping"])
+
+        plain = Linter().check(text)
+        with_terms = Linter(config).check(text)
+
+        assert [f for f in plain.flags if f.type == FlagType.JARGON_DENSE]
+        assert not [f for f in with_terms.flags if f.type == FlagType.JARGON_DENSE]
+
+    def test_bug_domain_phrase_own_joiners(self):
+        """
+        Bug: Multi-word domain terms only matched words joined by spaces or a
+        single hyphen, so "Kullback--Leibler", an en dash or "a/b" never matched.
+        Expected: A term matches its own spelling; spaces and dashes are
+        interchangeable.
+        """
+        text = "We minimise the Kullback--Leibler divergence and cross\u2013validation error estimates."
+        config = Config(domain_terms=["Kullback-Leibler divergence", "cross-validation"])
+
+        plain = Linter().check(text)
+        with_terms = Linter(config).check(text)
+
+        assert [f for f in plain.flags if f.type == FlagType.JARGON_DENSE]
+        assert not [f for f in with_terms.flags if f.type == FlagType.JARGON_DENSE]
+
+    def test_bug_domain_phrase_matched_across_punctuation(self):
+        """
+        Bug: Multi-word domain terms matched across any punctuation, so
+        "machine, learning" counted as the term "machine learning".
+        Expected: Only spaces or a hyphen join the words of a term.
+        """
+        text = "After reconfiguring the machine, learning interoperability became easy."
+        result = Linter(Config(domain_terms=["machine learning"])).check(text)
+
+        assert [f for f in result.flags if f.type == FlagType.JARGON_DENSE]
+
+    @pytest.mark.parametrize(
+        "cite", ["\\cite{walker2017}", "\\citep[p.~5]{walker2017}", "\\parencite{walker2017}"]
+    )
+    def test_bug_latex_citations_not_recognised(self, tmp_path, cite):
+        """
+        Bug: \\cite{...} became "[citation]", which no citation pattern matched,
+        and \\citep/\\parencite were deleted, so every cited claim in a LaTeX
+        paper was flagged as needing a citation.
+        Expected: A cited claim is not flagged; an uncited one still is.
+        """
+        claim = "Recent studies show that sleep loss impairs recall"
+        cited = tmp_path / "cited.tex"
+        cited.write_text(f"{claim} {cite}.\n", encoding="utf-8")
+        uncited = tmp_path / "uncited.tex"
+        uncited.write_text(f"{claim}.\n", encoding="utf-8")
+        needs_citation = (FlagType.CITATION_NEEDED, FlagType.WEASEL)
+
+        assert not [f for f in Linter().check_file(cited).flags if f.type in needs_citation]
+        assert [f for f in Linter().check_file(uncited).flags if f.type in needs_citation]
+
+    def test_bug_citation_counted_as_jargon(self, tmp_path):
+        """
+        Bug: The word "citation" in the placeholder a LaTeX citation becomes
+        was counted as jargon, tipping cited sentences over the threshold.
+        Expected: Words inside a citation are not counted as jargon.
+        """
+        path = tmp_path / "paper.tex"
+        path.write_text(
+            "The data obviously shows that education causes success \\cite{smith2020}.\n",
+            encoding="utf-8",
+        )
+
+        assert not [f for f in Linter().check_file(path).flags if f.type == FlagType.JARGON_DENSE]
+
+    @pytest.mark.parametrize(
+        ("name", "source", "line"),
+        [
+            (
+                "list.md",
+                "Two lines of work are relevant:\n\n"
+                "- Many researchers believe that screen time causes insomnia\n"
+                "- [4] argue that the effect is small\n",
+                3,
+            ),
+            (
+                "list.tex",
+                "Two lines of work are relevant:\n\n\\begin{itemize}\n"
+                "\\item Many researchers believe that screen time causes insomnia\n"
+                "\\item \\citet{walker2017} argue that the effect is small\n\\end{itemize}\n",
+                4,
+            ),
+        ],
+    )
+    def test_bug_list_items_share_citations(self, tmp_path, name, source, line):
+        """
+        Bug: List items without a full stop ran together into one sentence, so
+        a citation in one item hid the flags of an uncited item next to it.
+        Expected: Each list item is a sentence of its own.
+        """
+        path = tmp_path / name
+        path.write_text(source, encoding="utf-8")
+
+        flags = Linter().check_file(path).flags
+
+        assert [f for f in flags if f.type == FlagType.WEASEL and f.line == line]
+
+    def test_bug_typed_citation_reminder_counted_as_citation(self):
+        """
+        Bug: The LaTeX citation placeholder "[citation]" was recognised in any
+        text, so a "[citation]" reminder typed in a draft hid the claim's flags.
+        Expected: Only a citation command counts; the typed reminder does not,
+        and its word isn't counted as jargon either.
+        """
+        result = Linter().check("Studies show that remote work increases productivity [citation].")
+        reminder = Linter().check(
+            "In 2015, the university introduced a mandatory study-skills module [citation]."
+        )
+
+        dense = Linter().check(
+            "Most universities offer no structured support for these students [citation needed]."
+        )
+
+        assert [f for f in result.flags if f.type in (FlagType.CITATION_NEEDED, FlagType.WEASEL)]
+        assert [f for f in reminder.flags if f.type == FlagType.CITATION_NEEDED]
+        assert not [f for f in reminder.flags if f.type == FlagType.JARGON_DENSE]
+        # Nor does the reminder dilute the sentence's jargon
+        assert [f for f in dense.flags if f.type == FlagType.JARGON_DENSE]
+
+    def test_bug_citation_after_period_joined_next_sentence(self, tmp_path):
+        """
+        Bug: A citation placed after the period ("claim.\\footcite{...}") was
+        glued to it, so the next, uncited sentence ran into the cited one.
+        Expected: The cited claim is not flagged; the next sentence still is.
+        """
+        path = tmp_path / "history.tex"
+        path.write_text(
+            "Studies show that the reform failed.\\footcite{smith1990}\n"
+            "Research shows that most apprentices left.\n",
+            encoding="utf-8",
+        )
+        needs_citation = (FlagType.CITATION_NEEDED, FlagType.WEASEL)
+
+        flags = [f for f in Linter().check_file(path).flags if f.type in needs_citation]
+
+        assert {f.line for f in flags} == {2}
+
+    @staticmethod
+    def jargon_words(text, terms=()):
+        result = Linter(Config(domain_terms=list(terms))).check(text)
+        flags = [f for f in result.flags if f.type == FlagType.JARGON_DENSE]
+        return {word for f in flags for word in f.term.split(", ")}
+
+    @pytest.mark.parametrize(
+        ("text", "term", "words"),
+        [
+            (
+                "Ecologists modelled presence-absence observations using hierarchical occupancy.",
+                "presence/absence",
+                {"presence"},
+            ),
+            (
+                "Hydrostatic buoyancy follows Archimedes' principle under equilibrium conditions.",
+                "Archimedes' principle",
+                {"Archimedes", "principle"},
+            ),
+        ],
+    )
+    def test_bug_domain_phrase_joiner_variants(self, text, term, words):
+        """
+        Bug: A term joined by a slash no longer matched its hyphenated form, and
+        one with an apostrophe before a space ("Archimedes' principle") never
+        matched its own spelling.
+        Expected: The term's words are not counted as jargon.
+        """
+        assert words <= self.jargon_words(text)
+        assert not words & self.jargon_words(text, [term])
+
     def test_bug_unknown_domain_silently_ignored(self):
         """
         Bug: An unknown domain name was accepted without any error.
@@ -612,7 +806,9 @@ class TestFileHandlingRegression:
 
     def test_empty_file(self):
         """Empty files should raise appropriate error."""
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", suffix=".txt", delete=False
+        ) as f:
             f.write("")
             f.flush()
 
@@ -621,7 +817,9 @@ class TestFileHandlingRegression:
 
     def test_file_only_whitespace(self):
         """Files with only whitespace should raise error."""
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", suffix=".txt", delete=False
+        ) as f:
             f.write("   \n\n\t\t   ")
             f.flush()
 

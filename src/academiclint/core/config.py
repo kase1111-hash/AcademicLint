@@ -1,5 +1,6 @@
 """Configuration classes for AcademicLint."""
 
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -44,9 +45,9 @@ class OutputConfig:
 
     def _validate(self) -> None:
         """Validate output configuration values."""
-        if self.format not in VALID_OUTPUT_FORMATS:
+        if not isinstance(self.format, str) or self.format not in VALID_OUTPUT_FORMATS:
             raise ConfigurationError(
-                f"Invalid output format '{self.format}'. "
+                f"Invalid output format {self.format!r}. "
                 f"Valid options: {', '.join(sorted(VALID_OUTPUT_FORMATS))}"
             )
 
@@ -87,10 +88,16 @@ class Config:
             ConfigurationError: If any configuration value is invalid
         """
         # Validate level
-        if self.level not in VALID_LEVELS:
+        if not isinstance(self.level, str) or self.level not in VALID_LEVELS:
             raise ConfigurationError(
-                f"Invalid level '{self.level}'. Valid options: {', '.join(sorted(VALID_LEVELS))}"
+                f"Invalid level {self.level!r}. Valid options: {', '.join(sorted(VALID_LEVELS))}"
             )
+
+        # domain is a built-in name or a path to a domain file
+        if isinstance(self.domain, os.PathLike):
+            self.domain = os.fspath(self.domain)
+        if self.domain is not None and not isinstance(self.domain, str):
+            raise ConfigurationError(f"domain must be a string, got {type(self.domain).__name__}")
 
         _validate_unit_interval("min_density", self.min_density)
         if self.fail_under is not None:
@@ -98,6 +105,10 @@ class Config:
 
         # Validate domain_file exists if specified
         if self.domain_file is not None:
+            if not isinstance(self.domain_file, (str, os.PathLike)):
+                raise ConfigurationError(
+                    f"domain_file must be a path, got {type(self.domain_file).__name__}"
+                )
             path = Path(self.domain_file)
             if not path.exists():
                 raise ConfigurationError(f"Domain file not found: {self.domain_file}")
@@ -128,10 +139,12 @@ class Config:
             raise FileNotFoundError(f"Configuration file not found: {path}")
 
         try:
-            with path.open() as f:
+            with path.open(encoding="utf-8") as f:
                 data = yaml.safe_load(f) or {}
         except yaml.YAMLError as e:
             raise ConfigurationError(f"Invalid YAML in configuration file: {e}") from e
+        except UnicodeDecodeError as e:
+            raise ConfigurationError(f"Configuration file is not valid UTF-8: {e}") from e
 
         if not isinstance(data, dict):
             raise ConfigurationError(
@@ -142,8 +155,16 @@ class Config:
             data.update(overrides)
 
         # Handle nested output config
-        output_data = data.pop("output", {})
-        output_config = OutputConfig(**output_data) if output_data else OutputConfig()
+        output_data = data.pop("output", None) or {}
+        if not isinstance(output_data, dict):
+            raise ConfigurationError(
+                f"'output' must be a YAML mapping, got {type(output_data).__name__}"
+            )
+
+        try:
+            output_config = OutputConfig(**output_data)
+        except TypeError as e:
+            raise ConfigurationError(f"Unknown output option: {e}") from e
 
         try:
             return cls(output=output_config, **data)

@@ -447,7 +447,9 @@ class TestFileProcessingPipeline:
 
     def test_markdown_file_processing(self, linter):
         """Markdown file should be processed correctly."""
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False) as f:
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", suffix=".md", delete=False
+        ) as f:
             f.write("# Test Document\n\n")
             f.write(GOOD_TEXT_PRECISE)
             f.flush()
@@ -459,7 +461,9 @@ class TestFileProcessingPipeline:
 
     def test_txt_file_processing(self, linter):
         """Text file should be processed correctly."""
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", suffix=".txt", delete=False
+        ) as f:
             f.write(BAD_TEXT_VAGUE)
             f.flush()
 
@@ -470,7 +474,9 @@ class TestFileProcessingPipeline:
 
     def test_path_object_accepted(self, linter):
         """Path object should be accepted."""
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", suffix=".txt", delete=False
+        ) as f:
             f.write("Test content for file processing.")
             f.flush()
 

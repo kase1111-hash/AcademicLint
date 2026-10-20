@@ -1,11 +1,15 @@
 """NLP processing pipeline for AcademicLint."""
 
 import logging
+import re
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
-from academiclint.core.exceptions import ModelNotFoundError, ProcessingError
+from academiclint.core.exceptions import ModelLoadError, ModelNotFoundError, ProcessingError
+from academiclint.core.parser import CITATION_PLACEHOLDER
 from academiclint.core.result import Span
+from academiclint.utils.patterns import CITATION_PATTERNS, CITATION_REMINDERS
 
 logger = logging.getLogger(__name__)
 
@@ -101,26 +105,52 @@ DEFAULT_MODEL = "en_core_web_lg"
 # word vectors), so a lighter install is still usable.
 FALLBACK_MODELS = ("en_core_web_lg", "en_core_web_md", "en_core_web_sm")
 
-PARAGRAPH_COMPONENT = "academiclint_paragraph_boundaries"
 
-
-def _mark_paragraph_starts(doc: Any) -> Any:
-    """spaCy component: start a new sentence after every blank line.
-
-    Without this, the parser happily runs a sentence across a paragraph break
-    (e.g. a Markdown heading followed by body text), which makes sentences
-    straddle paragraphs. Must run before the parser, which respects preset
-    boundaries.
-    """
-    text = doc.text  # Doc.text is rebuilt on every access; read it once
-    prev_end = None
-    for token in doc:
-        if token.is_space:
-            continue
-        if prev_end is not None and "\n\n" in text[prev_end : token.idx]:
-            token.is_sent_start = True
-        prev_end = token.idx + len(token.text)
-    return doc
+_CITATION = "|".join(f"(?:{pattern})" for pattern in CITATION_PATTERNS)
+# Citations, or reminders of missing ones ("[citation needed]")
+_CITATION_OR_REMINDER = "|".join(
+    f"(?:{pattern})" for pattern in CITATION_PATTERNS + CITATION_REMINDERS
+)
+# A "sentence" holding nothing but those, e.g. "[12]."
+_CITATION_ONLY = re.compile(rf"(?:\s*(?:{_CITATION_OR_REMINDER}))+[\s.,;:!?]*")
+# A sentence opening with a bracketed citation, e.g. "[12], and others agree."
+_LEADING_CITATION = re.compile(rf"(?=[\[(\u27e6])(?:{_CITATION_OR_REMINDER})")
+# The end of a sentence, before any citations or reminders that follow it
+_SENTENCE_END = re.compile(rf"[.!?][\"'\u201d\u2019)\]]*(?:\s*(?:{_CITATION_OR_REMINDER}))*\s*$")
+# Closing brackets of a citation or reminder: after one and a full stop, a
+# capitalised word starts a sentence ("...instead [citation].\nResearch shows")
+_CITATION_CLOSE = (CITATION_PLACEHOLDER[-1], "]")
+# Penn Treebank tags of finite verbs
+_FINITE_VERB = frozenset({"VBD", "VBZ", "VBP", "MD"})
+_CITATION_FULL = re.compile(_CITATION)
+_REMINDER = re.compile("|".join(f"(?:{pattern})" for pattern in CITATION_REMINDERS))
+# Words a citation is the object of in "As reported in [12]", "according to [4]"
+_PREPOSITIONS = frozenset(
+    {
+        "in",
+        "of",
+        "to",
+        "by",
+        "from",
+        "with",
+        "see",
+        "cf",
+        "on",
+        "at",
+        "for",
+        "per",
+        "like",
+        "unlike",
+    }
+)
+# Words opening a subordinate clause: in "Although X is unclear, many
+# researchers\n[12] argue...", the verb before the comma is not the line's own
+_SUBORDINATORS = frozenset(
+    {"although", "though", "even", "while", "whereas", "because", "since", "if", "unless"}
+    | {"when", "despite", "as", "after", "before", "once", "given", "until", "whether"}
+)
+# Words after a comma that start a new clause of the sentence ("..., and many researchers")
+_CONJUNCTIONS = frozenset({"and", "but", "yet", "so", "or", "nor", "whereas", "while"})
 
 
 class NLPPipeline:
@@ -145,19 +175,15 @@ class NLPPipeline:
 
         Raises:
             ModelNotFoundError: If no candidate spaCy model is installed
-            ProcessingError: If spaCy fails to load for other reasons
+            ModelLoadError: If spaCy or the model fails to load for other reasons
         """
         if self._nlp is not None:
             return self._nlp
 
         try:
             import spacy
-            from spacy.language import Language
         except Exception as e:
-            raise ProcessingError("Failed to import spaCy", original_error=e) from e
-
-        if not Language.has_factory(PARAGRAPH_COMPONENT):
-            Language.component(PARAGRAPH_COMPONENT, func=_mark_paragraph_starts)
+            raise ModelLoadError("Failed to import spaCy", original_error=e) from e
 
         for candidate in self._candidates:
             logger.info("Loading spaCy model: %s", candidate)
@@ -168,15 +194,10 @@ class NLPPipeline:
                 continue
             except Exception as e:
                 logger.error("Failed to load spaCy model: %s", e)
-                raise ProcessingError(
+                raise ModelLoadError(
                     f"Failed to load spaCy model '{candidate}'",
                     original_error=e,
                 ) from e
-
-            if "parser" in self._nlp.pipe_names:
-                self._nlp.add_pipe(PARAGRAPH_COMPONENT, before="parser")
-            else:
-                self._nlp.add_pipe(PARAGRAPH_COMPONENT, first=True)
 
             if candidate != self.model_name:
                 logger.warning(
@@ -191,17 +212,20 @@ class NLPPipeline:
         logger.error("spaCy model not found: %s", self.model_name)
         raise ModelNotFoundError(self.model_name)
 
-    def process(self, text: str) -> ProcessedDocument:
+    def process(self, text: str, sentence_starts: Sequence[int] = ()) -> ProcessedDocument:
         """Process text through NLP pipeline.
 
         Args:
             text: The text to process
+            sentence_starts: Offsets where a sentence starts whatever the
+                parser finds (e.g. list items, from ParsedText)
 
         Returns:
             ProcessedDocument with tokens, sentences, entities, etc.
 
         Raises:
             ModelNotFoundError: If the spaCy model is not installed
+            ModelLoadError: If spaCy or the model fails to load (a ProcessingError)
             ProcessingError: If NLP processing fails
         """
         nlp = self._ensure_loaded()
@@ -229,15 +253,16 @@ class NLPPipeline:
                 for token in doc
             ]
 
-            # Extract sentences
-            sentences = []
-            for sent in doc.sents:
-                sentence = self._build_sentence(sent)
-                if sentence is not None:
-                    sentences.append(sentence)
+            # Extract sentences, paired with their spaCy spans
+            sentence_spans = [
+                (sentence, span)
+                for span in self._sentence_spans(doc, sentence_starts)
+                if (sentence := self._build_sentence(span)) is not None
+            ]
+            sentences = [sentence for sentence, _ in sentence_spans]
 
             # Extract paragraphs (split by double newlines)
-            paragraphs = self._extract_paragraphs(text, doc)
+            paragraphs = self._extract_paragraphs(text, sentence_spans)
 
             # Extract entities
             entities = [
@@ -292,6 +317,190 @@ class NLPPipeline:
             raise ProcessingError("Failed to extract document features", original_error=e) from e
 
     @staticmethod
+    def _sentence_spans(doc: Any, starts: Sequence[int] = ()) -> list[Any]:
+        """Return the doc's sentence spans, split wherever one crosses a blank line.
+
+        The parser can run a sentence across a paragraph break (e.g. a Markdown
+        heading into the body text below it). Splitting after parsing keeps the
+        parser's own boundaries inside each paragraph; presetting boundaries
+        before the parser instead makes the small English model mis-split the
+        body sentence ("Johnson (2019) found..." -> "Johnson", "(", ...).
+        A sentence is also split at each of `starts`, such as list items, which
+        the parser runs together when they have no full stop, and after a
+        bracketed citation or reminder that ends a sentence ("...instead
+        [citation].\nResearch shows..."), which the parser can run into the
+        next one.
+        """
+        spans: list[Any] = []
+        pending = sorted(starts)
+        next_start = 0
+        recent: list[Any] = []  # The last few non-space tokens
+        finite = False  # Whether the span so far has a finite verb (is a clause)
+        # Whether the span opens with a preposition or subordinator ("In a study
+        # that followed...", "When the trial was stopped...") and has had no comma
+        # since: an introductory clause, still waiting for its main clause
+        introductory = False
+
+        def add(span: Any, may_merge: bool) -> None:
+            if may_merge and spans and NLPPipeline._continues_with_citation(spans[-1], span):
+                spans[-1] = doc[spans[-1].start : span.end]
+            else:
+                spans.append(span)
+
+        for sent in doc.sents:
+            sent_text = sent.text  # Span.text is rebuilt on every access
+            start = sent.start
+            may_merge = True  # Whether the span from start may join the one before
+            prev_end = None  # End of the previous non-space token, relative to sent
+            for token in sent:
+                if token.is_space:
+                    continue
+                forced = False
+                while next_start < len(pending) and pending[next_start] <= token.idx:
+                    forced = True
+                    next_start += 1
+                offset = token.idx - sent.start_char
+                if prev_end is None:
+                    may_merge = not forced
+                    finite = False
+                    introductory = NLPPipeline._opens_clause(token)
+                elif (
+                    forced
+                    or "\n\n" in sent_text[prev_end:offset]
+                    or (
+                        token.text[:1].isupper()
+                        and NLPPipeline._cited_end(
+                            recent, sent_text[prev_end:offset], finite and not introductory
+                        )
+                    )
+                ):
+                    add(doc[start : token.i], may_merge)
+                    start = token.i
+                    may_merge = not forced
+                    finite = False
+                    introductory = NLPPipeline._opens_clause(token)
+                prev_end = offset + len(token.text)
+                recent = [*recent[-7:], token]
+                finite = finite or token.tag_ in _FINITE_VERB
+                introductory = introductory and token.text != ","
+            add(doc[start : sent.end], may_merge)
+        return spans
+
+    @staticmethod
+    def _opens_clause(token: Any) -> bool:
+        """Whether token opens an introductory phrase or clause ("In", "When")."""
+        return (
+            token.lower_ in _PREPOSITIONS
+            or token.lower_ in _SUBORDINATORS
+            or token.pos_ in ("ADP", "SCONJ")
+        )
+
+    @staticmethod
+    def _cited_end(recent: list[Any], gap: str, clause: bool) -> bool:
+        """Whether a bracketed citation or reminder ends the sentence there.
+
+        recent holds the last few non-space tokens, gap the space after them
+        and clause whether the sentence so far has a finite verb; the next word
+        is capitalised. That is the case after "...instead [citation]." and
+        when a reminder, or a citation closing a clause, ends its line without
+        a full stop ("...varies between patients [12]\nMost patients...").
+        Not after an introductory phrase ("In a large cohort study [3]\nWalker
+        and colleagues found...") or a preposition ("As reported in [12]").
+        """
+        if len(recent) >= 2 and recent[-2].text in _CITATION_CLOSE and recent[-1].text in ".!?":
+            return True
+        found = NLPPipeline._line_end_citation(recent, gap)
+        if found is None:
+            return False
+        cited, word = found
+        if _REMINDER.fullmatch(cited):
+            return True
+        return (
+            clause
+            and bool(_CITATION_FULL.fullmatch(cited))
+            and not (
+                word is not None
+                and (
+                    word.lower_ in _PREPOSITIONS
+                    or word.pos_ in ("ADP", "SCONJ")
+                    or word.tag_ in ("TO", "VBG", "VBN")
+                )
+            )
+        )
+
+    @staticmethod
+    def _line_end_citation(recent: list[Any], gap: str) -> tuple[str, Any] | None:
+        """The bracketed text ending recent at a line break, and the word before it.
+
+        The word is None at the start, or when glued to the bracket ("by~[12]"
+        is checked against _PREPOSITIONS here and reported as no word).
+        """
+        if "\n" not in gap or not recent or recent[-1].text not in _CITATION_CLOSE:
+            return None
+        opening = "[" if recent[-1].text == "]" else CITATION_PLACEHOLDER[0]
+        i = next((i for i in range(len(recent) - 1, -1, -1) if opening in recent[i].text), None)
+        if i is None:
+            return None
+        cited = "".join(t.text_with_ws for t in recent[i:]).strip()
+        cited = cited[cited.rindex(opening) :]
+        glued = recent[i].text[: recent[i].text.rindex(opening)].rstrip("~")
+        if glued:
+            return ("" if glued.lower() in _PREPOSITIONS else cited), None
+        return cited, recent[i - 1] if i else None
+
+    @staticmethod
+    def _continues_with_citation(prev: Any, span: Any) -> bool:
+        """Whether span is a citation the parser split off the sentence before.
+
+        The large English model ends a sentence before a bracket, so
+        "... impairs recall [12]." becomes "... impairs recall" and "[12].",
+        and detectors looking for a citation in the claim's sentence miss it.
+        """
+        doc = span.doc
+        end = prev.end  # End of prev's content
+        while end > prev.start and doc[end - 1].is_space:
+            end -= 1
+        start = span.start  # Start of span's content
+        while start < span.end and doc[start].is_space:
+            start += 1
+        if end == prev.start or start == span.end:
+            return False
+        # Only the tokens at the boundary are read: prev grows with each merge
+        if "\n\n" in doc[end - 1].whitespace_ + doc[end:start].text_with_ws:
+            return False
+        text = doc[start : span.end].text
+        if _CITATION_ONLY.fullmatch(text):
+            return True
+        leading = _LEADING_CITATION.match(text)
+        if not leading or _SENTENCE_END.search(doc[max(prev.start, end - 12) : end].text):
+            return False
+        if "\n" in doc[end - 1].whitespace_ + doc[end:start].text_with_ws:
+            # A citation opening a line may be the subject of a new clause in
+            # an outline ("...weekly\n[3] reported that..."): a finite verb
+            # straight after it, following a line that is a clause itself.
+            # Not "...in children\n[21], suggesting" or "Many researchers\n[12]
+            # argue that...", where the citation belongs to the sentence.
+            after = doc[start].idx + leading.end()
+            following = next((t for t in doc[start : span.end] if t.idx >= after), None)
+            if following is not None and following.tag_ in _FINITE_VERB:
+                # Not "Researchers studying X" (no finite verb), nor "Although X
+                # is unclear, many researchers" (only before the comma)
+                # nor "X is common, and many researchers" (only before ", and")
+                before = list(doc[max(prev.start, end - 50) : end])
+                first = next((t for t in doc[prev.start : end] if not t.is_space), None)
+                depth, last_comma, last_conjunction = 0, -1, -1
+                for k, t in enumerate(before):
+                    depth += (t.text in "([") - (t.text in ")]")
+                    if t.text == "," and depth <= 0:
+                        last_comma = k
+                        if k + 1 < len(before) and before[k + 1].lower_ in _CONJUNCTIONS:
+                            last_conjunction = k
+                subordinate = first is not None and first.lower_ in _SUBORDINATORS
+                before = before[(last_comma if subordinate else last_conjunction) + 1 :]
+                return not any(t.tag_ in _FINITE_VERB for t in before)
+        return True
+
+    @staticmethod
     def _build_sentence(sent: Any) -> Sentence | None:
         """Convert a spaCy sentence span into a Sentence.
 
@@ -323,7 +532,9 @@ class NLPPipeline:
             tokens=tokens,
         )
 
-    def _extract_paragraphs(self, text: str, doc: Any) -> list[Paragraph]:
+    def _extract_paragraphs(
+        self, text: str, sentence_spans: list[tuple[Sentence, Any]]
+    ) -> list[Paragraph]:
         """Extract paragraphs from text.
 
         This method reuses the already-processed spaCy doc to avoid
@@ -331,7 +542,7 @@ class NLPPipeline:
 
         Args:
             text: Original text
-            doc: spaCy Doc object
+            sentence_spans: Sentences paired with their spaCy spans
 
         Returns:
             List of Paragraph objects
@@ -342,13 +553,6 @@ class NLPPipeline:
         try:
             paragraphs = []
             para_texts = text.split("\n\n")
-
-            # Pre-extract all sentences from the main doc with their spans
-            doc_sentences = [
-                (sentence, sent)
-                for sent in doc.sents
-                if (sentence := self._build_sentence(sent)) is not None
-            ]
 
             current_pos = 0
             for raw_para in para_texts:
@@ -368,7 +572,7 @@ class NLPPipeline:
                 para_sentences = []
                 word_count = 0
 
-                for sentence, sent in doc_sentences:
+                for sentence, sent in sentence_spans:
                     if start <= sentence.span.start < end:
                         para_sentences.append(sentence)
                         # Count words in this sentence (non-punctuation, non-space)

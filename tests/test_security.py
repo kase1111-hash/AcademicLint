@@ -409,7 +409,9 @@ class TestConfigurationSecurity:
         """Env file parsing shouldn't execute code."""
         from academiclint.utils.env import load_env
 
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".env", delete=False) as f:
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", suffix=".env", delete=False
+        ) as f:
             # Write potentially dangerous content
             f.write("NORMAL_VAR=value\n")
             f.write("$(whoami)=hacked\n")  # Command injection attempt
@@ -499,7 +501,9 @@ class TestDependencySecurity:
     def test_yaml_safe_load_used(self):
         """YAML loading should use safe_load."""
         # Create a YAML config with potential exploit
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", suffix=".yaml", delete=False
+        ) as f:
             # Python object instantiation attempt
             f.write("level: !!python/object:os.system ['echo hacked']\n")
             f.flush()

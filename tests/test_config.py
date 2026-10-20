@@ -1,6 +1,7 @@
 """Tests for configuration handling."""
 
 import tempfile
+from pathlib import Path
 
 from academiclint.core.config import Config, OutputConfig
 
@@ -51,7 +52,9 @@ domain_terms:
   - epistemology
   - ontology
 """
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".yml", delete=False) as f:
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", suffix=".yml", delete=False
+        ) as f:
             f.write(yaml_content)
             f.flush()
 
@@ -59,6 +62,16 @@ domain_terms:
             assert config.level == "strict"
             assert config.min_density == 0.65
             assert "epistemology" in config.domain_terms
+
+
+class TestDomainOption:
+    """Tests for the domain setting."""
+
+    def test_domain_accepts_a_path(self):
+        """domain may name a domain file; a pathlib.Path is stored as a string."""
+        config = Config(domain=Path("my-domain.yml"))
+
+        assert config.domain == "my-domain.yml"
 
 
 class TestOutputConfig:

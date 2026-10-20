@@ -5,6 +5,7 @@ import logging
 import time
 import uuid
 from bisect import bisect_right
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -69,7 +70,7 @@ class Linter:
 
         Raises:
             ModelNotFoundError: If spaCy model is not installed
-            ProcessingError: If pipeline fails to initialize
+            ModelLoadError: If spaCy or the model fails to load
         """
         if self._nlp is None:
             from academiclint.core.pipeline import NLPPipeline
@@ -101,11 +102,19 @@ class Linter:
         Raises:
             ValidationError: If the text is invalid (None, empty, or too long)
             ModelNotFoundError: If spaCy model is not installed
+            ModelLoadError: If spaCy or the model fails to load (a ProcessingError)
             ProcessingError: If NLP processing fails
             DetectorError: If a detector fails (only in strict mode)
         """
+        return self._check(text)
+
+    def _check(self, text: str, sentence_starts: Sequence[int] = ()) -> AnalysisResult:
+        """Analyze text, starting a sentence at each of sentence_starts (see check)."""
         # Validate and sanitize input
-        text = validate_text(text)
+        checked = validate_text(text)
+        if len(checked) != len(text):
+            sentence_starts = ()  # Offsets into the unsanitized text
+        text = checked
 
         start_time = time.perf_counter()
         check_id = f"check_{uuid.uuid4().hex[:12]}"
@@ -122,7 +131,7 @@ class Linter:
 
         # Process document through NLP pipeline
         logger.debug("Processing document through NLP pipeline")
-        doc = nlp.process(text)
+        doc = nlp.process(text, sentence_starts)
         logger.debug(
             "NLP processing complete: %d tokens, %d sentences, %d paragraphs",
             len(doc.tokens),
@@ -283,11 +292,11 @@ class Linter:
         validated_path = validate_file_path(path, must_exist=True, check_extension=True)
         logger.debug("File validated: %s", validated_path)
 
-        from academiclint.core.parser import parse_file
+        from academiclint.core.parser import parse_document
 
         try:
-            text = parse_file(validated_path)
-            logger.debug("File parsed: %d characters", len(text))
+            parsed = parse_document(validated_path)
+            logger.debug("File parsed: %d characters", len(parsed.text))
         except Exception as e:
             logger.error("Failed to parse file %s: %s", path, e)
             if isinstance(e, (ValidationError, FileNotFoundError, ParsingError)):
@@ -297,7 +306,14 @@ class Linter:
                 file_path=str(validated_path),
             ) from e
 
-        return self.check(text)
+        result = self._check(parsed.text, parsed.sentence_starts)
+
+        # Report lines of the source file, not of the extracted text
+        if parsed.source_lines is not None:
+            for flag in result.flags:
+                flag.line = parsed.source_line(flag.line)
+
+        return result
 
     def check_files(self, paths: list[Path | str]) -> dict[Path, AnalysisResult]:
         """Analyze multiple files.
@@ -351,8 +367,9 @@ class Linter:
                     )
                 terms.extend(manager.get_terms(config.domain))
             if config.domain_file is not None:
-                # get_terms also includes the terms of the file's `parent` domain
-                terms.extend(manager.get_terms(str(config.domain_file)))
+                # Resolved, so a file named like a built-in domain is still read as a
+                # file; get_terms also includes the terms of the file's `parent`
+                terms.extend(manager.get_terms(str(Path(config.domain_file).resolve())))
         except (OSError, ValueError, yaml.YAMLError) as e:
             raise ConfigurationError(f"Failed to load domain vocabulary: {e}") from e
 

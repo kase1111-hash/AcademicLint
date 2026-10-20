@@ -1,23 +1,61 @@
 """Document parsing utilities for AcademicLint."""
 
 import re
+from collections.abc import Callable
+from dataclasses import dataclass, field
 from pathlib import Path
 
+from academiclint.utils.patterns import CITATION_PATTERNS
 
-def parse_file(path: Path) -> str:
-    """Parse a file and extract text content.
+# What citation commands such as \\cite{...} become; detectors treat it as a
+# citation. Its brackets (U+27E6/U+27E7) keep a "[citation]" typed in a draft as
+# a reminder from counting as one, and the parsers don't split them off.
+CITATION_PLACEHOLDER = "\u27e6citation\u27e7"
 
-    Supports .md, .txt, and .tex files.
+# Marks the end of a heading's title until _finish splits headings off from
+# the text after them. Removed from the input first so it can't be forged.
+_HEADING_END = "\x1e"
+# Marks where a list item starts until _finish records it (and blanks it).
+# Removed from the input first, like _HEADING_END.
+_ITEM_START = "\x1a"
+# Stands in for a removed LaTeX comment until the end of parsing, so a line
+# that held only a comment isn't taken for a blank line before then (inline
+# math may wrap around it). Removed from the input first, like _HEADING_END.
+_COMMENT = "\x1b"
+
+
+@dataclass
+class ParsedText:
+    """Text extracted from a document, with a map back to the source lines."""
+
+    text: str
+    # Source line (1-based) of each line of text; None when they are the same
+    source_lines: list[int] | None = None
+    # Offsets in text where a sentence starts whatever the parser finds, such
+    # as list items, which rarely end with a full stop
+    sentence_starts: list[int] = field(default_factory=list)
+
+    def source_line(self, line: int) -> int:
+        """Map a 1-based line of the extracted text to its line in the source."""
+        if self.source_lines is None or not 1 <= line <= len(self.source_lines):
+            return line
+        return self.source_lines[line - 1]
+
+
+def parse_document(path: Path | str) -> ParsedText:
+    """Parse a file and extract its text, with a map back to source lines.
+
+    Supports .md/.markdown, .tex and plain text files.
 
     Args:
         path: Path to the file
 
     Returns:
-        Extracted text content
+        Extracted text and its source line map
 
     Raises:
         FileNotFoundError: If the file doesn't exist
-        ValueError: If the file format is unsupported
+        UnicodeDecodeError: If the file is not valid UTF-8
     """
     path = Path(path)
 
@@ -29,21 +67,269 @@ def parse_file(path: Path) -> str:
     with path.open("r", encoding="utf-8") as f:
         content = f.read()
 
-    if suffix == ".md":
-        return parse_markdown(content)
-    elif suffix == ".txt":
-        return content
-    elif suffix == ".tex":
-        return parse_latex(content)
-    else:
-        # Try to read as plain text
-        return content
+    if suffix in (".md", ".markdown"):
+        return markdown_to_text(content)
+    if suffix == ".tex":
+        return latex_to_text(content)
+    # Plain text
+    return ParsedText(content)
+
+
+def parse_file(path: Path | str) -> str:
+    """Parse a file and extract text content.
+
+    Args:
+        path: Path to the file
+
+    Returns:
+        Extracted text content
+    """
+    return parse_document(path).text
+
+
+def _sub_keep_lines(
+    pattern: str,
+    repl: str | Callable[[re.Match[str]], str],
+    text: str,
+    *,
+    inline: bool,
+    keep_blank: bool = False,
+) -> str:
+    """re.sub that keeps the line breaks of each replaced match.
+
+    Flag positions are reported as line numbers in the parsed text, so they
+    only point at the right source line if parsing never drops one. Removed
+    block constructs (code blocks, figures) leave empty lines, which separate
+    paragraphs. Removed inline constructs (a \\cite spread over several lines,
+    a footnote of two paragraphs) leave lines holding a space instead, so the
+    sentence around them stays whole. With keep_blank, a line that was blank
+    in the source stays empty: an HTML comment holding a blank line ends the
+    paragraph before it, as in Markdown.
+    """
+
+    def replace(match: re.Match[str]) -> str:
+        new = repl(match) if callable(repl) else match.expand(repl)
+        removed = match.group(0).count("\n") - new.count("\n")
+        if removed <= 0:
+            return new
+        if not inline:
+            return new + "\n" * removed
+        if not keep_blank:
+            # A space on every line, the first included: the match may start it
+            return new + " \n" * removed + " "
+        parts = match.group(0).split("\n")
+        head = " " if parts[0].strip() else ""
+        return (
+            new + head + "".join("\n" + (" " if part.strip() else "") for part in parts[-removed:])
+        )
+
+    return re.sub(pattern, replace, text)
+
+
+_SECTION = re.compile(r"\\(?:section|subsection|subsubsection|chapter)\*?(?:\[[^\]\n]*\])?\{")
+
+
+def _convert_sections(text: str) -> str:
+    """Replace LaTeX section commands with their titles, marked as headings.
+
+    The title's closing brace is found by counting braces (escaped ones
+    excepted), so titles holding commands such as \\emph{...} at any depth
+    are kept whole; those commands are removed later. A title whose braces
+    don't balance on its line is left for the later clean-up.
+    """
+    out = []
+    pos = 0
+    for match in _SECTION.finditer(text):
+        if match.start() < pos:
+            continue
+        depth = 1
+        i = match.end()
+        while i < len(text) and text[i] != "\n":
+            if text[i] == "\\":
+                i += 2
+                continue
+            if text[i] == "{":
+                depth += 1
+            elif text[i] == "}":
+                depth -= 1
+                if depth == 0:
+                    break
+            i += 1
+        if depth:
+            continue
+        out += [text[pos : match.start()], text[match.end() : i].strip(), _HEADING_END]
+        pos = i + 1
+    out.append(text[pos:])
+    return "".join(out)
+
+
+def _citation(match: re.Match[str]) -> str:
+    """The placeholder for a citation command, before any punctuation it follows."""
+    if match.group(1):
+        return f" {CITATION_PLACEHOLDER}{match.group(1)}"
+    return CITATION_PLACEHOLDER
+
+
+def _blank(match: re.Match[str]) -> str:
+    """Replace a match with spaces, keeping columns on the line unchanged."""
+    return " " * len(match.group(0))
+
+
+def _item(match: re.Match[str]) -> str:
+    """Replace a list marker with spaces, marking where the item starts."""
+    return " " * (len(match.group(0)) - 1) + _ITEM_START
+
+
+# The end of a sentence or lead-in: punctuation, then closing quotes or
+# brackets or a citation or footnote reference ('failure."', "agrees.[12]")
+_LINE_END = re.compile(r"[.:!?][\"'\u201d\u2019)\]]*(?:\[[^\]]*\])?$")
+
+
+_BULLET = re.compile(r"[ \t]*[-*+][ \t]+")
+_NUMBERED = re.compile(r"[ \t]*(\d+)\.[ \t]+")
+
+
+def _mark_list_items(text: str) -> str:
+    """Mark Markdown list items (see _item).
+
+    As in CommonMark, a numbered item other than "1." can't interrupt a
+    paragraph, so a wrapped line starting "2019. The..." stays text.
+    """
+    lines = text.split("\n")
+    indents: set[int] = set()  # Of the open list's markers, up to an unindented paragraph
+    prev_blank = True
+    for i, line in enumerate(lines):
+        match = _BULLET.match(line) or _NUMBERED.match(line)
+        indent = len(line) - len(line.lstrip())
+        if match and match.re is _NUMBERED and match.group(1) != "1" and not prev_blank:
+            # Without a blank line before it, only a sibling of an earlier item
+            # ("1. A\n\n   para.\n2. B"), not "   2019. Most..." inside one
+            match = match if indent in indents else None
+        if match:
+            lines[i] = _item(match) + line[match.end() :]
+            indents.add(indent)
+        elif (line.strip() and not indent and prev_blank) or _HEADING_END in line:
+            indents = set()  # A paragraph or heading after the list, not a wrapped line
+        prev_blank = not line.strip()
+    return "\n".join(lines)
+
+
+# A setext heading's underline
+_SETEXT = re.compile(r"=+|-+")
+# Where a sentence ends inside a line (not "et al." or "e.g."), closing
+# quotes or a citation included
+_CLAUSE_START = re.compile(
+    r"(?<!\bal)(?<!\be\.g)(?<!\bi\.e)(?<!\bcf)(?<!\bvs)"
+    r"[.!?:][\"'\u201d\u2019)\]]*(?:\[[^\]]*\])?\s"
+)
+_CITATIONS = re.compile("|".join(f"(?:{pattern})" for pattern in CITATION_PATTERNS))
+# Verbs a short lead-in after a sentence on the same line can end with
+_REPORTING = re.compile(
+    r"[a-z]+ed|shows?|suggests?|finds?|found|indicates?|reports?|argues?|agrees?|notes?"
+    r"|demonstrates?|reveals?|claims?|states?|observes?|concludes?|confirms?|shown"
+)
+# Words a lead-in clause can end with however short it is ("Research suggests that")
+_LEAD_IN_END = re.compile(
+    r"that|as|by|of|to|for|from|with|in|on|at|includ(?:e|es|ed|ing)|are|is|were|was|be|such"
+    r"|like|whether|because|when|where",
+    re.IGNORECASE,
+)
+
+
+def _continues(block: list[str], in_list: bool) -> bool:
+    """Whether a list item carries on the sentence of the lines before it.
+
+    block holds the lines since the last blank line or list item. An item
+    carries on after a comma, semicolon, "and" or "or" ("predicted by\n- a,\n-
+    b, and\n- c [12].") and after a lead-in clause without punctuation (which
+    may be wrapped over several lines). A new item after an unpunctuated item,
+    after a lead-in ending "...groups:", or after a label ("Strengths", a
+    caption, a setext underline) starts a sentence.
+    """
+    prev = block[-1].rstrip()
+    words = prev.split()
+    if prev.endswith((",", ";")) or (words and words[-1].lower() in ("and", "or")):
+        return True
+    if in_list or not words or _LINE_END.search(prev) or _SETEXT.fullmatch(prev.strip()):
+        return False
+    # The clause since the last sentence end ("...weeks. Lee [4] observed")
+    joined = " ".join(block).rstrip()
+    cut = next(reversed(list(_CLAUSE_START.finditer(joined))), None)
+    clause = joined[cut.end() :] if cut else joined
+    words = clause.split()
+    if not words:
+        return False
+    # A label has no citation; a lead-in such as "Lee (2021) found" may be short.
+    # So may one ending in a reporting verb after a sentence on its line
+    # ("...in adolescence. Studies show"), unlike a caption ("Table 2. Sample
+    # characteristics") or a label on a line of its own
+    cited = bool(_CITATIONS.search(clause)) and bool(_CITATIONS.sub("", clause).split())
+    same_line = (
+        cut is not None and cut.group(0)[0] in ".!?" and cut.start() >= len(joined) - len(prev)
+    )
+    return (
+        len(words) >= 4
+        or cited
+        or bool(_LEAD_IN_END.fullmatch(words[-1]))
+        or (same_line and len(words) >= 2 and bool(_REPORTING.fullmatch(words[-1])))
+    )
+
+
+def _finish(text: str) -> ParsedText:
+    """Split headings off from the text after them and map lines to the source.
+
+    Every step before this keeps the source's line breaks. A heading directly
+    followed by text (on its own line or the next) would run into the first
+    sentence, so a blank line is added after it to make it a paragraph of its
+    own; the added lines are recorded so line numbers still match the source.
+    """
+    lines = text.split("\n")
+    out: list[str] = []
+    source: list[int] = []
+    in_list = False  # After a list item, up to the next blank line
+    block: list[str] = []  # Lines since the last blank line, heading or list item
+    for number, raw in enumerate(lines, 1):
+        line = raw
+        if not line.strip():
+            in_list = False
+            block = []
+        elif _ITEM_START in line:
+            if block and _continues(block, in_list):
+                line = line.replace(_ITEM_START, " ")
+            in_list = True
+            block = [line]
+        elif _HEADING_END in line:
+            in_list = False
+            block = []
+        else:
+            block.append(line)
+        if _HEADING_END not in line:
+            out.append(line)
+            source.append(number)
+            continue
+
+        title, _, rest = line.partition(_HEADING_END)
+        rest = rest.replace(_HEADING_END, "").strip()
+        out.append(title.rstrip())
+        source.append(number)
+        if rest:
+            # Text on the heading's own line, e.g. \section{Results} We found...
+            out += ["", rest]
+            source += [number, number]
+        elif number < len(lines) and lines[number] != "":
+            # Text on the next line. A line left holding only spaces (e.g. by a
+            # removed \\label) is not a paragraph break, so it gets one too.
+            out.append("")
+            source.append(number)
+
+    text = "\n".join(out).rstrip()
+    starts = [i for i, c in enumerate(text) if c == _ITEM_START]
+    text = text.replace(_ITEM_START, " ")
+    return ParsedText(text, source[: text.count("\n") + 1], starts)
 
 
 def parse_markdown(content: str) -> str:
     """Parse Markdown content and extract text.
-
-    Removes Markdown formatting while preserving text structure.
 
     Args:
         content: Raw Markdown content
@@ -51,26 +337,55 @@ def parse_markdown(content: str) -> str:
     Returns:
         Plain text with formatting removed
     """
-    text = content
+    return markdown_to_text(content).text
+
+
+def markdown_to_text(content: str) -> ParsedText:
+    """Parse Markdown content and extract text, with a map back to source lines.
+
+    Removes Markdown formatting while preserving text structure.
+
+    Args:
+        content: Raw Markdown content
+
+    Returns:
+        Plain text with formatting removed, and its source line map
+    """
+    text = content.replace(_HEADING_END, "").replace(_ITEM_START, "")
 
     # Remove code blocks
-    text = re.sub(r"```[\s\S]*?```", "", text)
-    text = re.sub(r"`[^`]+`", "", text)
+    text = _sub_keep_lines(r"```[\s\S]*?```", "", text, inline=False)
+    # A code span can't hold a blank line; a match across one is two stray backticks
+    text = _sub_keep_lines(r"`(?:[^`\n]|\n(?![ \t]*\n))+`", "", text, inline=True)
 
     # Remove images
-    text = re.sub(r"!\[([^\]]*)\]\([^)]+\)", r"\1", text)
+    text = _sub_keep_lines(r"!\[([^\]]*)\]\([^)]+\)", r"\1", text, inline=True)
 
     # Convert links to just text
-    text = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", text)
+    text = _sub_keep_lines(r"\[([^\]]+)\]\([^)]+\)", r"\1", text, inline=True)
 
-    # Remove HTML tags
-    text = re.sub(r"<[^>]+>", "", text)
+    # Remove HTML comments and tags. A tag must start like one ("<a", "</a"),
+    # so "p < .001" ... ">" is not taken for a tag and deleted.
+    text = _sub_keep_lines(r"<!--[\s\S]*?-->", "", text, inline=True, keep_blank=True)
+    text = _sub_keep_lines(r"</?[A-Za-z][^<>]*>", "", text, inline=True, keep_blank=True)
 
     # Remove horizontal rules
-    text = re.sub(r"^[-*_]{3,}\s*$", "", text, flags=re.MULTILINE)
+    text = re.sub(r"^[-*_]{3,}[ \t]*$", "", text, flags=re.MULTILINE)
 
-    # Remove heading markers but keep text
-    text = re.sub(r"^#{1,6}\s+", "", text, flags=re.MULTILINE)
+    # Remove heading markers but keep text. Line-start markers become spaces
+    # of the same width so columns on those lines still match the source. A
+    # closing run of #'s only counts after a space, so "C#" keeps its '#'.
+    text = re.sub(
+        r"^([ \t]{0,3}#{1,6}[ \t]+)(.*?)(?:[ \t]+#+)?[ \t]*$",
+        lambda m: " " * len(m.group(1)) + m.group(2) + _HEADING_END,
+        text,
+        flags=re.MULTILINE,
+    )
+
+    # Remove blockquote and list markers ([ \t], not \s, so the blank line
+    # before a list stays). Before emphasis, which would pair up '*' bullets.
+    text = re.sub(r"^>[ \t]*", _blank, text, flags=re.MULTILINE)
+    text = _mark_list_items(text)
 
     # Remove emphasis markers
     text = re.sub(r"\*\*([^*]+)\*\*", r"\1", text)
@@ -78,23 +393,11 @@ def parse_markdown(content: str) -> str:
     text = re.sub(r"__([^_]+)__", r"\1", text)
     text = re.sub(r"_([^_]+)_", r"\1", text)
 
-    # Remove blockquote markers
-    text = re.sub(r"^>\s*", "", text, flags=re.MULTILINE)
-
-    # Remove list markers
-    text = re.sub(r"^[\s]*[-*+]\s+", "", text, flags=re.MULTILINE)
-    text = re.sub(r"^[\s]*\d+\.\s+", "", text, flags=re.MULTILINE)
-
-    # Collapse multiple newlines
-    text = re.sub(r"\n{3,}", "\n\n", text)
-
-    return text.strip()
+    return _finish(text)
 
 
 def parse_latex(content: str) -> str:
     """Parse LaTeX content and extract text.
-
-    Removes LaTeX commands while preserving text content.
 
     Args:
         content: Raw LaTeX content
@@ -102,10 +405,24 @@ def parse_latex(content: str) -> str:
     Returns:
         Plain text with LaTeX commands removed
     """
-    text = content
+    return latex_to_text(content).text
+
+
+def latex_to_text(content: str) -> ParsedText:
+    """Parse LaTeX content and extract text, with a map back to source lines.
+
+    Removes LaTeX commands while preserving text content.
+
+    Args:
+        content: Raw LaTeX content
+
+    Returns:
+        Plain text with LaTeX commands removed, and its source line map
+    """
+    text = content.replace(_HEADING_END, "").replace(_ITEM_START, "").replace(_COMMENT, "")
 
     # Remove comments
-    text = re.sub(r"%.*$", "", text, flags=re.MULTILINE)
+    text = re.sub(r"(?<!\\)((?:\\\\)*)%.*$", rf"\1{_COMMENT}", text, flags=re.MULTILINE)
 
     # Remove document class and packages
     text = re.sub(r"\\documentclass(\[.*?\])?\{.*?\}", "", text)
@@ -121,35 +438,59 @@ def parse_latex(content: str) -> str:
         text = re.sub(rf"\\end\{{{env}\}}", "", text)
 
     # Remove figure/table environments entirely
-    text = re.sub(r"\\begin\{(figure|table)\}[\s\S]*?\\end\{\1\}", "", text)
+    text = _sub_keep_lines(r"\\begin\{(figure|table)\}[\s\S]*?\\end\{\1\}", "", text, inline=False)
 
     # Remove equations
-    text = re.sub(r"\$\$[\s\S]*?\$\$", "", text)
-    text = re.sub(r"\$[^$]+\$", "", text)
-    text = re.sub(r"\\begin\{equation\}[\s\S]*?\\end\{equation\}", "", text)
-    text = re.sub(r"\\begin\{align\}[\s\S]*?\\end\{align\}", "", text)
+    text = _sub_keep_lines(r"\$\$[\s\S]*?\$\$", "", text, inline=False)
+    # Inline math. A dollar sign after an odd number of backslashes is a
+    # literal \\$; after an even number (a \\\\ line break) it opens math. Math
+    # can't hold a blank line, so a match across one is two stray dollar signs.
+    text = _sub_keep_lines(
+        r"(?<!\\)((?:\\\\)*)\$(?:[^$\\\n]|\\.|\n(?![ \t]*\n))+\$", r"\1", text, inline=True
+    )
+    text = _sub_keep_lines(r"\\begin\{equation\}[\s\S]*?\\end\{equation\}", "", text, inline=False)
+    text = _sub_keep_lines(r"\\begin\{align\}[\s\S]*?\\end\{align\}", "", text, inline=False)
 
-    # Convert section commands to text
-    text = re.sub(r"\\(section|subsection|subsubsection|chapter)\*?\{([^}]+)\}", r"\2\n\n", text)
+    # Convert section commands to their titles
+    text = _convert_sections(text)
 
     # Remove formatting commands but keep content
     text = re.sub(r"\\(textbf|textit|emph|underline)\{([^}]+)\}", r"\2", text)
 
-    # Remove citations (keep as placeholder)
-    text = re.sub(r"\\cite\{[^}]+\}", "[citation]", text)
+    # Replace citations with a placeholder. A run of parenthetical or note
+    # citations on a line becomes one, and one placed after the punctuation
+    # (".\\footcite{...}") goes before it, so it stays with the sentence it
+    # cites rather than joining it to the next one. \\citet and \\textcite are
+    # part of their sentence ("\\citet{x} showed..."), so they stand alone.
+    args = r"\*?(?:\[[^\]]*\])*\{[^}]+\}"
+    # "by~\\cite{x}": the tie is a space before the citation. After the full
+    # stop (".~\\cite{x}") it goes, so the citation moves before the stop
+    cite_command = r"\\(?:cite|citep|citet|parencite|textcite|autocite|footcite)\b"
+    text = re.sub(rf"(?<=[.!?])~(?={cite_command})", "", text)
+    text = re.sub(rf"(?<!\\)~(?={cite_command})", " ", text)
+    note = rf"\\(?:cite|citep|parencite|autocite|footcite){args}"
+    text = _sub_keep_lines(rf"([.!?])?{note}(?:[ \t]*{note})*", _citation, text, inline=True)
+    text = _sub_keep_lines(rf"\\(?:citet|textcite){args}", CITATION_PLACEHOLDER, text, inline=True)
 
     # Remove references
-    text = re.sub(r"\\ref\{[^}]+\}", "[ref]", text)
+    text = _sub_keep_lines(r"\\ref\{[^}]+\}", "[ref]", text, inline=True)
 
     # Remove labels
-    text = re.sub(r"\\label\{[^}]+\}", "", text)
+    text = _sub_keep_lines(r"\\label\{[^}]+\}", "", text, inline=True)
+
+    # List items, marked so that each starts a sentence; list environments
+    # go, with their options ("\\begin{itemize}[noitemsep]")
+    text = re.sub(
+        r"\\(?:begin|end)\{(?:itemize|enumerate|description)\}(?:\[[^\]\n]*\])?", "", text
+    )
+    text = re.sub(r"^[ \t]*\\item\b[ \t]*", _item, text, flags=re.MULTILINE)
 
     # Remove other common commands
     text = re.sub(r"\\(newpage|clearpage|pagebreak)", "", text)
     text = re.sub(r"\\(small|large|Large|LARGE|huge|Huge)", "", text)
 
     # Remove remaining commands with braces
-    text = re.sub(r"\\[a-zA-Z]+\{[^}]*\}", "", text)
+    text = _sub_keep_lines(r"\\[a-zA-Z]+\{[^}]*\}", "", text, inline=True)
 
     # Remove remaining simple commands
     text = re.sub(r"\\[a-zA-Z]+", "", text)
@@ -157,7 +498,4 @@ def parse_latex(content: str) -> str:
     # Clean up braces
     text = re.sub(r"[{}]", "", text)
 
-    # Collapse multiple newlines
-    text = re.sub(r"\n{3,}", "\n\n", text)
-
-    return text.strip()
+    return _finish(text.replace(_COMMENT, ""))

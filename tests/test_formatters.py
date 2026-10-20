@@ -9,7 +9,7 @@ from academiclint.core.result import (
     Span,
     Summary,
 )
-from academiclint.formatters import GitHubFormatter, TerminalFormatter
+from academiclint.formatters import GitHubFormatter, MarkdownFormatter, TerminalFormatter
 
 
 def make_result(term: str = "led\nto", suggestion: str = "Cite evidence", density: float = 0.4):
@@ -86,3 +86,20 @@ class TestTerminalFormatter:
 
         assert "SUMMARY" in output
         assert "FLAG:" not in output
+
+
+class TestMarkdownFormatter:
+    """Tests for Markdown report output."""
+
+    def test_line_breaks_collapsed_in_quotes_and_terms(self):
+        """A newline inside a '> ' quote would end the blockquote early."""
+        output = MarkdownFormatter().format(make_result())
+
+        assert "> This led to that." in output
+        assert '"led to"' in output
+
+    def test_quiet_omits_detailed_findings(self):
+        output = MarkdownFormatter(quiet=True).format(make_result())
+
+        assert "## Summary" in output
+        assert "Detailed Findings" not in output

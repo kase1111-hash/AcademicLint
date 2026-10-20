@@ -4,10 +4,12 @@ Exception Hierarchy:
     AcademicLintError (base)
     ├── ConfigurationError - Invalid configuration
     ├── ValidationError - Input validation failed
+    │   └── EmptyTextError - No text to analyze
     ├── ParsingError - Document parsing failed
     ├── PipelineError - NLP pipeline errors
     │   ├── ModelNotFoundError - spaCy model not installed
     │   └── ProcessingError - Error during NLP processing
+    │       └── ModelLoadError - spaCy or a model failed to load
     ├── DetectorError - Error in detector module
     └── FormatterError - Error formatting output
 """
@@ -58,6 +60,12 @@ class ValidationError(AcademicLintError):
         - File path is invalid
         - Unsupported file extension
     """
+
+    pass
+
+
+class EmptyTextError(ValidationError):
+    """Raised when there is no text to analyze (empty or whitespace only)."""
 
     pass
 
@@ -115,6 +123,16 @@ class ProcessingError(PipelineError):
         super().__init__(message, details)
 
 
+class ModelLoadError(ProcessingError):
+    """Raised when spaCy or an installed model fails to load.
+
+    A ProcessingError, as load failures always were; unlike other processing
+    errors it is not specific to one document.
+    """
+
+    pass
+
+
 class DetectorError(AcademicLintError):
     """Raised when a detector encounters an error.
 
@@ -148,7 +166,9 @@ __all__ = [
     "AcademicLintError",
     "ConfigurationError",
     "DetectorError",
+    "EmptyTextError",
     "FormatterError",
+    "ModelLoadError",
     "ModelNotFoundError",
     "ParsingError",
     "PipelineError",

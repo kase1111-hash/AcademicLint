@@ -20,7 +20,7 @@ def load_domain(path: Path | str) -> dict[str, Any]:
     if not path.exists():
         raise FileNotFoundError(f"Domain file not found: {path}")
 
-    with path.open() as f:
+    with path.open(encoding="utf-8") as f:
         data = yaml.safe_load(f)
 
     return validate_domain(data)
@@ -38,18 +38,29 @@ def validate_domain(data: dict) -> dict:
     if not isinstance(data, dict):
         raise ValueError("Domain file must contain a YAML dictionary")
 
+    parent = data.get("parent")
+    if parent is not None and not isinstance(parent, str):
+        raise ValueError(f"'parent' must be a domain name, got {type(parent).__name__}")
+
     # Set defaults
     domain = {
         "name": data.get("name", "custom"),
         "description": data.get("description", ""),
-        "parent": data.get("parent"),
-        "technical_terms": data.get("technical_terms", []),
-        "domain_weasels": data.get("domain_weasels", []),
-        "permitted_hedges": data.get("permitted_hedges", []),
-        "accepted_causal_patterns": data.get("accepted_causal_patterns", []),
+        "parent": parent,
         "density_baseline": data.get("density_baseline", 0.50),
         "density_strict": data.get("density_strict", 0.65),
-        "domain_fillers": data.get("domain_fillers", []),
     }
+    for key in (
+        "technical_terms",
+        "domain_weasels",
+        "permitted_hedges",
+        "accepted_causal_patterns",
+        "domain_fillers",
+    ):
+        # An empty YAML key (`technical_terms:`) loads as None
+        value = data.get(key) or []
+        if not isinstance(value, list) or not all(isinstance(v, str) for v in value):
+            raise ValueError(f"'{key}' must be a list of strings")
+        domain[key] = value
 
     return domain

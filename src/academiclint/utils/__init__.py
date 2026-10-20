@@ -21,6 +21,7 @@ from academiclint.utils.logging import (
 from academiclint.utils.patterns import (
     CAUSAL_PATTERNS,
     CITATION_PATTERNS,
+    CITATION_REMINDERS,
     FILLER_PHRASES,
     FUNCTION_WORDS,
     HEDGES,
@@ -42,6 +43,7 @@ __all__ = [
     "VAGUE_TERMS",
     "CAUSAL_PATTERNS",
     "CITATION_PATTERNS",
+    "CITATION_REMINDERS",
     "WEASEL_PATTERNS",
     "HEDGES",
     "FILLER_PHRASES",

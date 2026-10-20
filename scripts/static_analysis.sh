@@ -116,7 +116,8 @@ if command -v pip-audit &> /dev/null; then
     # Audit installed third-party packages. This project (installed editable)
     # and URL-installed spaCy models are not on PyPI, so leave them out.
     AUDIT_REQS=$(mktemp)
-    pip freeze --exclude-editable | grep -v " @ " > "$AUDIT_REQS"
+    # --all keeps pip/setuptools/wheel, which pip freeze omits on Python < 3.12
+    pip freeze --all --exclude-editable | grep -v " @ " > "$AUDIT_REQS"
     if pip-audit --strict --desc on --no-deps --disable-pip -r "$AUDIT_REQS"; then
         echo -e "${GREEN}✓ No known vulnerabilities in dependencies${NC}"
     else

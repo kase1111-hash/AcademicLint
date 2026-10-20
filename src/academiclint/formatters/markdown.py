@@ -7,11 +7,16 @@ from academiclint.core.result import AnalysisResult
 from academiclint.formatters.base import Formatter
 
 
+def _inline(text: str) -> str:
+    """Collapse whitespace (including line breaks) so text fits on one line."""
+    return " ".join(text.split())
+
+
 class MarkdownFormatter(Formatter):
     """Formatter for Markdown output."""
 
-    def __init__(self, **kwargs):
-        pass
+    def __init__(self, quiet: bool = False, **kwargs):
+        self.quiet = quiet  # Omit the per-paragraph findings
 
     def format(self, result: AnalysisResult) -> str:
         """Format analysis result as Markdown."""
@@ -44,29 +49,8 @@ class MarkdownFormatter(Formatter):
             lines.append("")
 
         # Detailed findings
-        lines.append("## Detailed Findings")
-        lines.append("")
-
-        for para in result.paragraphs:
-            if not para.flags:
-                continue
-
-            lines.append(f"### Paragraph {para.index + 1} (Density: {para.density:.2f})")
-            lines.append("")
-
-            text_preview = para.text[:200] + "..." if len(para.text) > 200 else para.text
-            lines.append(f"> {text_preview}")
-            lines.append("")
-            lines.append("**Flags**:")
-            lines.append("")
-
-            for i, flag in enumerate(para.flags, 1):
-                lines.append(f'{i}. **{flag.type.value}**: "{flag.term}"')
-                lines.append(f"   - {flag.message}")
-                lines.append(f"   - *Suggestion*: {flag.suggestion}")
-                if flag.example_revision:
-                    lines.append(f"   - *Example*: {flag.example_revision}")
-                lines.append("")
+        if not self.quiet:
+            lines.extend(self._format_findings(result))
 
         # Overall suggestions
         if result.overall_suggestions:
@@ -76,6 +60,34 @@ class MarkdownFormatter(Formatter):
                 lines.append(f"- {suggestion}")
 
         return "\n".join(lines)
+
+    def _format_findings(self, result: AnalysisResult) -> list[str]:
+        """Format the per-paragraph findings section."""
+        lines = ["## Detailed Findings", ""]
+
+        for para in result.paragraphs:
+            if not para.flags:
+                continue
+
+            lines.append(f"### Paragraph {para.index + 1} (Density: {para.density:.2f})")
+            lines.append("")
+
+            text = _inline(para.text)
+            text_preview = text[:200] + "..." if len(text) > 200 else text
+            lines.append(f"> {text_preview}")
+            lines.append("")
+            lines.append("**Flags**:")
+            lines.append("")
+
+            for i, flag in enumerate(para.flags, 1):
+                lines.append(f'{i}. **{flag.type.value}**: "{_inline(flag.term)}"')
+                lines.append(f"   - {flag.message}")
+                lines.append(f"   - *Suggestion*: {flag.suggestion}")
+                if flag.example_revision:
+                    lines.append(f"   - *Example*: {flag.example_revision}")
+                lines.append("")
+
+        return lines
 
     def format_multiple(self, results: dict[Path, AnalysisResult]) -> str:
         """Format multiple results as Markdown."""
