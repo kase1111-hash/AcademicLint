@@ -79,17 +79,26 @@ class TestSourceLines:
     def test_list_items_start_sentences(self):
         """Each list item's start is recorded, without moving its text."""
         markdown = markdown_to_text("Two groups:\n- first item\n  wrapped\n1. second item\n")
+        stars = markdown_to_text("Two groups:\n* first item\n* second item\n")
         latex = latex_to_text(
             "Two groups:\n\\begin{itemize}\n  \\item first item\n\\item second item\n"
         )
 
-        for parsed in (markdown, latex):
+        for parsed in (markdown, stars, latex):
             starts = parsed.sentence_starts
             assert [parsed.text[i:].split("\n")[0].strip() for i in starts] == [
                 "first item",
                 "second item",
             ]
         assert markdown.text.splitlines()[1].index("first") == 2
+
+    def test_list_items_continuing_a_sentence(self):
+        """Items that carry on the sentence before them don't start sentences."""
+        parsed = markdown_to_text(
+            "Recall is predicted by\n- attention,\n- depth of processing, and\n- retrieval [12].\n"
+        )
+
+        assert parsed.sentence_starts == []
 
     def test_markdown_line_markers_keep_columns(self):
         parsed = parse_markdown("- many experts\n> some scholars\n## Heading here\n")
@@ -142,6 +151,23 @@ class TestStructure:
 
         assert "\n\n" not in parsed
 
+    def test_comment_inside_math(self):
+        """A commented-out line inside wrapped math is not a paragraph break."""
+        parsed = parse_latex(
+            "We minimise $L(w) =\n% + \\lambda_1 R(w)\n+ w$ over all weights.\n"
+            "Many experts agree that this works, and $w$ is unique."
+        )
+
+        assert "Many experts agree that this works, and  is unique." in parsed
+
+    def test_html_comment_with_blank_line_ends_paragraph(self):
+        """As in Markdown, a comment holding a blank line ends the block before it."""
+        parsed = parse_markdown(
+            "- Screen time causes insomnia\n<!-- check\n\nthis -->\nWalker (2017) reported it."
+        )
+
+        assert "\n\n" in parsed
+
     def test_dollars_across_paragraph_break_are_not_math(self):
         """Math can't hold a blank line, so the paragraph break stays."""
         parsed = parse_latex("Next para with $x\n\ny$ math.")
@@ -192,8 +218,10 @@ class TestStructure:
     def test_citation_after_punctuation_goes_before_it(self):
         """A citation after the period stays with its sentence, not the next one."""
         parsed = parse_latex("It was a failure.\\footcite{smith1990}\nResearch shows more.")
+        run = parse_latex("It was a failure.\\cite{a}\\cite{b} Research shows more.")
 
         assert parsed == f"It was a failure {CITATION_PLACEHOLDER}.\nResearch shows more."
+        assert run == f"It was a failure {CITATION_PLACEHOLDER}. Research shows more."
 
     def test_heading_title_with_nested_commands(self):
         parsed = parse_latex(

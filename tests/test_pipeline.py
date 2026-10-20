@@ -138,18 +138,11 @@ class TestCitationSplitOff:
 
         assert self.sentences(doc) == ["Studies show that sleep loss impairs recall\n[12]."]
 
-    def test_citation_opening_the_next_line(self):
-        """List items without a full stop stay apart when the next opens with a citation."""
-        doc = presplit(
-            "It is widely believed that social media use causes anxiety",
-            "[4] found no such effect in adults",
-            sep="\n",
-        )
+    def test_citation_opening_a_wrapped_line(self):
+        """Hard-wrapped prose often breaks the line just before a citation."""
+        doc = presplit("Sleep loss impairs recall", "[12], at least in adults.", sep="\n")
 
-        assert self.sentences(doc) == [
-            "It is widely believed that social media use causes anxiety",
-            "[4] found no such effect in adults",
-        ]
+        assert self.sentences(doc) == ["Sleep loss impairs recall\n[12], at least in adults."]
 
     def test_split_at_sentence_start(self):
         """A given start (a list item) splits a sentence the parser ran on."""

@@ -16,6 +16,10 @@ _HEADING_END = "\x1e"
 # Marks where a list item starts until _finish records it (and blanks it).
 # Removed from the input first, like _HEADING_END.
 _ITEM_START = "\x1a"
+# Stands in for a removed LaTeX comment until the end of parsing, so a line
+# that held only a comment isn't taken for a blank line before then (inline
+# math may wrap around it). Removed from the input first, like _HEADING_END.
+_COMMENT = "\x1b"
 
 
 @dataclass
@@ -82,7 +86,12 @@ def parse_file(path: Path | str) -> str:
 
 
 def _sub_keep_lines(
-    pattern: str, repl: str | Callable[[re.Match[str]], str], text: str, *, inline: bool
+    pattern: str,
+    repl: str | Callable[[re.Match[str]], str],
+    text: str,
+    *,
+    inline: bool,
+    keep_blank: bool = False,
 ) -> str:
     """re.sub that keeps the line breaks of each replaced match.
 
@@ -91,7 +100,9 @@ def _sub_keep_lines(
     block constructs (code blocks, figures) leave empty lines, which separate
     paragraphs. Removed inline constructs (a \\cite spread over several lines,
     a footnote of two paragraphs) leave lines holding a space instead, so the
-    sentence around them stays whole.
+    sentence around them stays whole. With keep_blank, a line that was blank
+    in the source stays empty: an HTML comment holding a blank line ends the
+    paragraph before it, as in Markdown.
     """
 
     def replace(match: re.Match[str]) -> str:
@@ -101,8 +112,14 @@ def _sub_keep_lines(
             return new
         if not inline:
             return new + "\n" * removed
-        # A space on every line, the first included: the match may start it
-        return new + " \n" * removed + " "
+        if not keep_blank:
+            # A space on every line, the first included: the match may start it
+            return new + " \n" * removed + " "
+        parts = match.group(0).split("\n")
+        head = " " if parts[0].strip() else ""
+        return (
+            new + head + "".join("\n" + (" " if part.strip() else "") for part in parts[-removed:])
+        )
 
     return re.sub(pattern, replace, text)
 
@@ -161,6 +178,21 @@ def _item(match: re.Match[str]) -> str:
     return " " * (len(match.group(0)) - 1) + _ITEM_START
 
 
+def _continues(prev: str, in_list: bool) -> bool:
+    """Whether a list item carries on the sentence of the line before it.
+
+    It does after a comma, semicolon, "and" or "or" ("predicted by\n- a,\n-
+    b, and\n- c [12].") and after a lead-in without punctuation; a new item
+    after an unpunctuated item, or after a lead-in ending "...groups:", starts
+    a sentence.
+    """
+    prev = prev.rstrip()
+    words = prev.split()
+    if prev.endswith((",", ";")) or (words and words[-1].lower() in ("and", "or")):
+        return True
+    return not in_list and not prev.endswith((".", ":", "!", "?"))
+
+
 def _finish(text: str) -> ParsedText:
     """Split headings off from the text after them and map lines to the source.
 
@@ -172,7 +204,15 @@ def _finish(text: str) -> ParsedText:
     lines = text.split("\n")
     out: list[str] = []
     source: list[int] = []
-    for number, line in enumerate(lines, 1):
+    in_list = False  # After a list item, up to the next blank line
+    for number, raw in enumerate(lines, 1):
+        line = raw
+        if not line.strip():
+            in_list = False
+        elif _ITEM_START in line:
+            if out and out[-1].strip() and _continues(out[-1], in_list):
+                line = line.replace(_ITEM_START, " ")
+            in_list = True
         if _HEADING_END not in line:
             out.append(line)
             source.append(number)
@@ -236,8 +276,8 @@ def markdown_to_text(content: str) -> ParsedText:
 
     # Remove HTML comments and tags. A tag must start like one ("<a", "</a"),
     # so "p < .001" ... ">" is not taken for a tag and deleted.
-    text = _sub_keep_lines(r"<!--[\s\S]*?-->", "", text, inline=True)
-    text = _sub_keep_lines(r"</?[A-Za-z][^<>]*>", "", text, inline=True)
+    text = _sub_keep_lines(r"<!--[\s\S]*?-->", "", text, inline=True, keep_blank=True)
+    text = _sub_keep_lines(r"</?[A-Za-z][^<>]*>", "", text, inline=True, keep_blank=True)
 
     # Remove horizontal rules
     text = re.sub(r"^[-*_]{3,}[ \t]*$", "", text, flags=re.MULTILINE)
@@ -252,17 +292,17 @@ def markdown_to_text(content: str) -> ParsedText:
         flags=re.MULTILINE,
     )
 
+    # Remove blockquote and list markers ([ \t], not \s, so the blank line
+    # before a list stays). Before emphasis, which would pair up '*' bullets.
+    text = re.sub(r"^>[ \t]*", _blank, text, flags=re.MULTILINE)
+    text = re.sub(r"^[ \t]*[-*+][ \t]+", _item, text, flags=re.MULTILINE)
+    text = re.sub(r"^[ \t]*\d+\.[ \t]+", _item, text, flags=re.MULTILINE)
+
     # Remove emphasis markers
     text = re.sub(r"\*\*([^*]+)\*\*", r"\1", text)
     text = re.sub(r"\*([^*]+)\*", r"\1", text)
     text = re.sub(r"__([^_]+)__", r"\1", text)
     text = re.sub(r"_([^_]+)_", r"\1", text)
-
-    # Remove blockquote and list markers ([ \t], not \s, so the blank line
-    # before a list stays)
-    text = re.sub(r"^>[ \t]*", _blank, text, flags=re.MULTILINE)
-    text = re.sub(r"^[ \t]*[-*+][ \t]+", _item, text, flags=re.MULTILINE)
-    text = re.sub(r"^[ \t]*\d+\.[ \t]+", _item, text, flags=re.MULTILINE)
 
     return _finish(text)
 
@@ -290,10 +330,10 @@ def latex_to_text(content: str) -> ParsedText:
     Returns:
         Plain text with LaTeX commands removed, and its source line map
     """
-    text = content.replace(_HEADING_END, "").replace(_ITEM_START, "")
+    text = content.replace(_HEADING_END, "").replace(_ITEM_START, "").replace(_COMMENT, "")
 
     # Remove comments
-    text = re.sub(r"%.*$", "", text, flags=re.MULTILINE)
+    text = re.sub(r"%.*$", _COMMENT, text, flags=re.MULTILINE)
 
     # Remove document class and packages
     text = re.sub(r"\\documentclass(\[.*?\])?\{.*?\}", "", text)
@@ -328,14 +368,12 @@ def latex_to_text(content: str) -> ParsedText:
     # Remove formatting commands but keep content
     text = re.sub(r"\\(textbf|textit|emph|underline)\{([^}]+)\}", r"\2", text)
 
-    # Replace citations with a placeholder. One placed after the punctuation
-    # (".\\footcite{...}") goes before it instead, so it stays with the
-    # sentence it cites rather than joining that sentence to the next one.
+    # Replace citations, a run of them at a time, with a placeholder. One placed
+    # after the punctuation (".\\footcite{...}") goes before it instead, so it
+    # stays with the sentence it cites rather than joining it to the next one.
+    cite = r"\\(?:cite[pt]?|parencite|textcite|autocite|footcite)\*?(?:\[[^\]]*\])*\{[^}]+\}"
     text = _sub_keep_lines(
-        r"([.!?])?\\(?:cite[pt]?|parencite|textcite|autocite|footcite)\*?(?:\[[^\]]*\])*\{[^}]+\}",
-        _citation,
-        text,
-        inline=True,
+        rf"([.!?])?{cite}(?:[ \t]*\n?[ \t]*{cite})*", _citation, text, inline=True
     )
 
     # Remove references
@@ -360,4 +398,4 @@ def latex_to_text(content: str) -> ParsedText:
     # Clean up braces
     text = re.sub(r"[{}]", "", text)
 
-    return _finish(text)
+    return _finish(text.replace(_COMMENT, ""))

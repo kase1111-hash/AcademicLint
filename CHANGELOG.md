@@ -68,10 +68,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - With `en_core_web_lg`, a bracketed citation after a claim ("... impairs
   recall [12].") was split off into a sentence of its own, so the claim was
   still flagged as needing a citation
-- Words inside a citation ("(Richardson, 2017)", the LaTeX placeholder)
-  counted as jargon
+- Words inside a citation ("(Richardson, 2017)", the LaTeX placeholder) or a
+  "[citation needed]" reminder counted as jargon
 - List items without a full stop ran into one sentence, so a citation in one
-  item covered the claims in the others; each item now starts a sentence
+  item covered the claims in the others; each item now starts a sentence,
+  unless it carries on the sentence before it ("predicted by\n- a,\n- b")
 - A `<` in Markdown prose (e.g. "p < .001") was taken for an HTML tag and the
   text up to the next `>` was deleted; an escaped `\$` in LaTeX was taken for
   math (a `\\` line break before `$` still opens it)

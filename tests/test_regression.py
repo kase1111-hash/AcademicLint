@@ -659,11 +659,17 @@ class TestPreviouslyFixedBugs:
         """
         Bug: The LaTeX citation placeholder "[citation]" was recognised in any
         text, so a "[citation]" reminder typed in a draft hid the claim's flags.
-        Expected: Only a citation command counts; the typed reminder does not.
+        Expected: Only a citation command counts; the typed reminder does not,
+        and its word isn't counted as jargon either.
         """
         result = Linter().check("Studies show that remote work increases productivity [citation].")
+        reminder = Linter().check(
+            "In 2015, the university introduced a mandatory study-skills module [citation]."
+        )
 
         assert [f for f in result.flags if f.type in (FlagType.CITATION_NEEDED, FlagType.WEASEL)]
+        assert [f for f in reminder.flags if f.type == FlagType.CITATION_NEEDED]
+        assert not [f for f in reminder.flags if f.type == FlagType.JARGON_DENSE]
 
     def test_bug_citation_after_period_joined_next_sentence(self, tmp_path):
         """

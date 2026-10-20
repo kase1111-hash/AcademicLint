@@ -66,6 +66,12 @@ CITATION_PATTERNS = [
     r"\u27e6citation\u27e7",  # What the LaTeX parser makes of \cite{...}
 ]
 
+# Reminders typed where a source is still missing. Not citations, but not
+# prose either: their words are not jargon, and the parser may split them off.
+CITATION_REMINDERS = [
+    r"(?i:\[citation(?: needed)?\])",
+]
+
 # Weasel word patterns
 WEASEL_PATTERNS = [
     # Vague attribution

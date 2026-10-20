@@ -6,7 +6,7 @@ from academiclint.core.config import Config
 from academiclint.core.pipeline import ProcessedDocument
 from academiclint.core.result import Flag, FlagType, Severity, Span
 from academiclint.detectors.base import Detector
-from academiclint.utils.patterns import CITATION_PATTERNS, COMMON_WORDS
+from academiclint.utils.patterns import CITATION_PATTERNS, CITATION_REMINDERS, COMMON_WORDS
 
 # Hyphen, soft hyphen and the Unicode hyphen/dash family
 _DASHES = "-\u00ad\u2010\u2011\u2012\u2013\u2014\u2015"
@@ -66,8 +66,13 @@ class JargonDetector(Detector):
         for sentence in doc.sentences:
             jargon_terms = []
             covered = [m.span() for p in phrase_patterns for m in p.finditer(sentence.text)]
-            # Words in a citation ("(Richardson, 2017)", the LaTeX placeholder) are not prose
-            covered += [m.span() for p in CITATION_PATTERNS for m in re.finditer(p, sentence.text)]
+            # Words in a citation ("(Richardson, 2017)", the LaTeX placeholder)
+            # or a "[citation needed]" reminder are not prose
+            covered += [
+                m.span()
+                for p in CITATION_PATTERNS + CITATION_REMINDERS
+                for m in re.finditer(p, sentence.text)
+            ]
             word_matches = list(re.finditer(r"\b\w+\b", sentence.text))
             words = [m.group() for m in word_matches]
 

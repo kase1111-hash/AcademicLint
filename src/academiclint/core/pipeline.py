@@ -9,7 +9,7 @@ from typing import Any, Optional
 from academiclint.core.exceptions import ModelLoadError, ModelNotFoundError, ProcessingError
 from academiclint.core.parser import CITATION_PLACEHOLDER
 from academiclint.core.result import Span
-from academiclint.utils.patterns import CITATION_PATTERNS
+from academiclint.utils.patterns import CITATION_PATTERNS, CITATION_REMINDERS
 
 logger = logging.getLogger(__name__)
 
@@ -106,7 +106,8 @@ DEFAULT_MODEL = "en_core_web_lg"
 FALLBACK_MODELS = ("en_core_web_lg", "en_core_web_md", "en_core_web_sm")
 
 
-_CITATION = "|".join(f"(?:{pattern})" for pattern in CITATION_PATTERNS)
+# Citations, and reminders of missing ones, that the parser may split off
+_CITATION = "|".join(f"(?:{pattern})" for pattern in CITATION_PATTERNS + CITATION_REMINDERS)
 # A "sentence" holding nothing but citations, e.g. "[12]."
 _CITATION_ONLY = re.compile(rf"(?:\s*(?:{_CITATION}))+[\s.,;:!?]*")
 # A sentence opening with a bracketed citation, e.g. "[12], and others agree."
@@ -351,15 +352,12 @@ class NLPPipeline:
         if end == prev.start or start == span.end:
             return False
         # Only the tokens at the boundary are read: prev grows with each merge
-        gap = doc[end - 1].whitespace_ + doc[end:start].text_with_ws
-        if "\n\n" in gap:
+        if "\n\n" in doc[end - 1].whitespace_ + doc[end:start].text_with_ws:
             return False
         text = doc[start : span.end].text
         if _CITATION_ONLY.fullmatch(text):
             return True
-        # A citation opening a new line starts a list item ("- [4] found..."),
-        # not the rest of the sentence before it
-        if "\n" in gap or not _LEADING_CITATION.match(text):
+        if not _LEADING_CITATION.match(text):
             return False
         return not _SENTENCE_END.search(doc[max(prev.start, end - 4) : end].text)
 
