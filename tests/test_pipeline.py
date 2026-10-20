@@ -175,6 +175,26 @@ class TestCitationSplitOff:
             "Research shows that most petitions were rural.",
         ]
 
+    def test_reminder_does_not_chain_merges(self):
+        """A reminder after a full stop joins its claim, but the next sentence doesn't."""
+        doc = presplit(
+            "Most experts agree that naps help.", "[citation needed]", "[12] found more."
+        )
+
+        assert self.sentences(doc) == [
+            "Most experts agree that naps help. [citation needed]",
+            "[12] found more.",
+        ]
+
+    def test_citation_leading_a_clause_on_the_next_line(self):
+        """In an outline, "[3] reported..." on its own line starts a new statement."""
+        doc = presplit(
+            "Most students procrastinate weekly", "[3] reported that it helps.", sep="\n"
+        )
+        next(t for t in doc if t.text == "reported").pos_ = "VERB"
+
+        assert len(self.sentences(doc)) == 2
+
     def test_citation_after_a_blank_line(self):
         doc = presplit("Introduction", "[12].", sep="\n\n")
 

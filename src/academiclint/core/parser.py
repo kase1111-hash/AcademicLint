@@ -178,19 +178,50 @@ def _item(match: re.Match[str]) -> str:
     return " " * (len(match.group(0)) - 1) + _ITEM_START
 
 
+# The end of a sentence or lead-in: punctuation, then closing quotes or
+# brackets or a footnote reference ('failure."', "documented.[^1]")
+_LINE_END = re.compile(r"[.:!?][\"'\u201d\u2019)\]]*(?:\[\^[^\]]*\])?$")
+
+
+_BULLET = re.compile(r"[ \t]*[-*+][ \t]+")
+_NUMBERED = re.compile(r"[ \t]*(\d+)\.[ \t]+")
+
+
+def _mark_list_items(text: str) -> str:
+    """Mark Markdown list items (see _item).
+
+    As in CommonMark, a numbered item other than "1." can't interrupt a
+    paragraph, so a wrapped line starting "2019. The..." stays text.
+    """
+    lines = text.split("\n")
+    in_list = False  # After a list item, up to the next blank line
+    prev_blank = True
+    for i, line in enumerate(lines):
+        match = _BULLET.match(line) or _NUMBERED.match(line)
+        if match and match.re is _NUMBERED and not (prev_blank or in_list):
+            match = None if match.group(1) != "1" else match
+        if match:
+            lines[i] = _item(match) + line[match.end() :]
+            in_list = True
+        elif not line.strip():
+            in_list = False
+        prev_blank = not line.strip()
+    return "\n".join(lines)
+
+
 def _continues(prev: str, in_list: bool) -> bool:
     """Whether a list item carries on the sentence of the line before it.
 
     It does after a comma, semicolon, "and" or "or" ("predicted by\n- a,\n-
-    b, and\n- c [12].") and after a lead-in without punctuation; a new item
-    after an unpunctuated item, or after a lead-in ending "...groups:", starts
-    a sentence.
+    b, and\n- c [12].") and after a lead-in clause without punctuation; a
+    new item after an unpunctuated item, after a lead-in ending "...groups:",
+    or after a short label ("Strengths", a setext underline) starts a sentence.
     """
     prev = prev.rstrip()
     words = prev.split()
     if prev.endswith((",", ";")) or (words and words[-1].lower() in ("and", "or")):
         return True
-    return not in_list and not prev.endswith((".", ":", "!", "?"))
+    return not in_list and len(words) >= 4 and not _LINE_END.search(prev)
 
 
 def _finish(text: str) -> ParsedText:
@@ -295,8 +326,7 @@ def markdown_to_text(content: str) -> ParsedText:
     # Remove blockquote and list markers ([ \t], not \s, so the blank line
     # before a list stays). Before emphasis, which would pair up '*' bullets.
     text = re.sub(r"^>[ \t]*", _blank, text, flags=re.MULTILINE)
-    text = re.sub(r"^[ \t]*[-*+][ \t]+", _item, text, flags=re.MULTILINE)
-    text = re.sub(r"^[ \t]*\d+\.[ \t]+", _item, text, flags=re.MULTILINE)
+    text = _mark_list_items(text)
 
     # Remove emphasis markers
     text = re.sub(r"\*\*([^*]+)\*\*", r"\1", text)
@@ -333,7 +363,7 @@ def latex_to_text(content: str) -> ParsedText:
     text = content.replace(_HEADING_END, "").replace(_ITEM_START, "").replace(_COMMENT, "")
 
     # Remove comments
-    text = re.sub(r"%.*$", _COMMENT, text, flags=re.MULTILINE)
+    text = re.sub(r"(?<!\\)((?:\\\\)*)%.*$", rf"\1{_COMMENT}", text, flags=re.MULTILINE)
 
     # Remove document class and packages
     text = re.sub(r"\\documentclass(\[.*?\])?\{.*?\}", "", text)
@@ -368,13 +398,15 @@ def latex_to_text(content: str) -> ParsedText:
     # Remove formatting commands but keep content
     text = re.sub(r"\\(textbf|textit|emph|underline)\{([^}]+)\}", r"\2", text)
 
-    # Replace citations, a run of them at a time, with a placeholder. One placed
-    # after the punctuation (".\\footcite{...}") goes before it instead, so it
-    # stays with the sentence it cites rather than joining it to the next one.
-    cite = r"\\(?:cite[pt]?|parencite|textcite|autocite|footcite)\*?(?:\[[^\]]*\])*\{[^}]+\}"
-    text = _sub_keep_lines(
-        rf"([.!?])?{cite}(?:[ \t]*\n?[ \t]*{cite})*", _citation, text, inline=True
-    )
+    # Replace citations with a placeholder. A run of parenthetical or note
+    # citations on a line becomes one, and one placed after the punctuation
+    # (".\\footcite{...}") goes before it, so it stays with the sentence it
+    # cites rather than joining it to the next one. \\citet and \\textcite are
+    # part of their sentence ("\\citet{x} showed..."), so they stand alone.
+    args = r"\*?(?:\[[^\]]*\])*\{[^}]+\}"
+    note = rf"\\(?:cite|citep|parencite|autocite|footcite){args}"
+    text = _sub_keep_lines(rf"([.!?])?{note}(?:[ \t]*{note})*", _citation, text, inline=True)
+    text = _sub_keep_lines(rf"\\(?:citet|textcite){args}", CITATION_PLACEHOLDER, text, inline=True)
 
     # Remove references
     text = _sub_keep_lines(r"\\ref\{[^}]+\}", "[ref]", text, inline=True)

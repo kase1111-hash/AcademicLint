@@ -67,13 +67,18 @@ class JargonDetector(Detector):
             jargon_terms = []
             covered = [m.span() for p in phrase_patterns for m in p.finditer(sentence.text)]
             # Words in a citation ("(Richardson, 2017)", the LaTeX placeholder)
-            # or a "[citation needed]" reminder are not prose
-            covered += [
-                m.span()
-                for p in CITATION_PATTERNS + CITATION_REMINDERS
-                for m in re.finditer(p, sentence.text)
+            # are not jargon; those in a "[citation needed]" reminder are not
+            # prose at all, so they don't count towards the words either
+            covered += [m.span() for p in CITATION_PATTERNS for m in re.finditer(p, sentence.text)]
+            reminders = [
+                m.span() for p in CITATION_REMINDERS for m in re.finditer(p, sentence.text)
             ]
-            word_matches = list(re.finditer(r"\b\w+\b", sentence.text))
+            covered += reminders
+            word_matches = [
+                m
+                for m in re.finditer(r"\b\w+\b", sentence.text)
+                if not any(start <= m.start() < end for start, end in reminders)
+            ]
             words = [m.group() for m in word_matches]
 
             for match in word_matches:

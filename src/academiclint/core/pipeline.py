@@ -106,13 +106,17 @@ DEFAULT_MODEL = "en_core_web_lg"
 FALLBACK_MODELS = ("en_core_web_lg", "en_core_web_md", "en_core_web_sm")
 
 
-# Citations, and reminders of missing ones, that the parser may split off
-_CITATION = "|".join(f"(?:{pattern})" for pattern in CITATION_PATTERNS + CITATION_REMINDERS)
-# A "sentence" holding nothing but citations, e.g. "[12]."
-_CITATION_ONLY = re.compile(rf"(?:\s*(?:{_CITATION}))+[\s.,;:!?]*")
+_CITATION = "|".join(f"(?:{pattern})" for pattern in CITATION_PATTERNS)
+# Citations, or reminders of missing ones ("[citation needed]")
+_CITATION_OR_REMINDER = "|".join(
+    f"(?:{pattern})" for pattern in CITATION_PATTERNS + CITATION_REMINDERS
+)
+# A "sentence" holding nothing but those, e.g. "[12]."
+_CITATION_ONLY = re.compile(rf"(?:\s*(?:{_CITATION_OR_REMINDER}))+[\s.,;:!?]*")
 # A sentence opening with a bracketed citation, e.g. "[12], and others agree."
 _LEADING_CITATION = re.compile(rf"(?=[\[(\u27e6])(?:{_CITATION})")
-_SENTENCE_END = re.compile(r"[.!?][\"'\u201d\u2019)\]]*$")
+# The end of a sentence, before any citations or reminders that follow it
+_SENTENCE_END = re.compile(rf"[.!?][\"'\u201d\u2019)\]]*(?:\s*(?:{_CITATION_OR_REMINDER}))*\s*$")
 # The placeholder's closing bracket, which only the LaTeX parser writes
 _CITATION_CLOSE = CITATION_PLACEHOLDER[-1]
 
@@ -357,9 +361,17 @@ class NLPPipeline:
         text = doc[start : span.end].text
         if _CITATION_ONLY.fullmatch(text):
             return True
-        if not _LEADING_CITATION.match(text):
+        leading = _LEADING_CITATION.match(text)
+        if not leading or _SENTENCE_END.search(doc[max(prev.start, end - 12) : end].text):
             return False
-        return not _SENTENCE_END.search(doc[max(prev.start, end - 4) : end].text)
+        if "\n" in doc[end - 1].whitespace_ + doc[end:start].text_with_ws:
+            # A citation opening a line may be the subject of a new one in an
+            # outline or list ("[3] reported that..."), not the claim's citation
+            after = doc[start].idx + leading.end()
+            for token in doc[start : span.end]:
+                if token.idx >= after and not (token.is_space or token.is_punct):
+                    return token.pos_ not in ("VERB", "AUX")
+        return True
 
     @staticmethod
     def _build_sentence(sent: Any) -> Sentence | None:

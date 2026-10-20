@@ -1,5 +1,7 @@
 """Tests for Markdown and LaTeX text extraction."""
 
+import pytest
+
 from academiclint.core.parser import (
     CITATION_PLACEHOLDER,
     latex_to_text,
@@ -100,6 +102,30 @@ class TestSourceLines:
 
         assert parsed.sentence_starts == []
 
+    @pytest.mark.parametrize(
+        "lead",
+        [
+            "**Strengths**",
+            "Results\n=======",
+            "This is well documented.[^1]",
+            'Some called it "a failure."',
+        ],
+    )
+    def test_list_after_label_or_finished_sentence(self, lead):
+        """A label or a finished sentence above a list is not a lead-in."""
+        parsed = markdown_to_text(f"{lead}\n- first item\n- second item\n")
+
+        assert len(parsed.sentence_starts) == 2
+
+    def test_year_starting_a_wrapped_line_is_not_a_list(self):
+        """As in CommonMark, only "1." can start a list inside a paragraph."""
+        parsed = markdown_to_text("It was first reported by Smith in\n2019. Many experts agree.\n")
+        listed = markdown_to_text("Results:\n\n2. second\n3. third\n")
+
+        assert "2019. Many experts agree." in parsed.text
+        assert parsed.sentence_starts == []
+        assert len(listed.sentence_starts) == 2
+
     def test_markdown_line_markers_keep_columns(self):
         parsed = parse_markdown("- many experts\n> some scholars\n## Heading here\n")
 
@@ -168,6 +194,18 @@ class TestStructure:
 
         assert "\n\n" in parsed
 
+    def test_escaped_percent_is_not_a_comment(self):
+        """'\\%' is a percent sign: the line goes on, in math or out of it."""
+        parsed = parse_latex(
+            "The group improved by $12\\%$ more, and 92\\% of sessions ran.\n"
+            "Many experts agree.\nThe slope $b$ was positive. % a comment"
+        )
+
+        assert parsed == (
+            "The group improved by  more, and 92\\% of sessions ran.\n"
+            "Many experts agree.\nThe slope  was positive."
+        )
+
     def test_dollars_across_paragraph_break_are_not_math(self):
         """Math can't hold a blank line, so the paragraph break stays."""
         parsed = parse_latex("Next para with $x\n\ny$ math.")
@@ -219,9 +257,13 @@ class TestStructure:
         """A citation after the period stays with its sentence, not the next one."""
         parsed = parse_latex("It was a failure.\\footcite{smith1990}\nResearch shows more.")
         run = parse_latex("It was a failure.\\cite{a}\\cite{b} Research shows more.")
+        subject = parse_latex("It lasts.\\cite{a}\n\\citet{b} showed that it causes harm.")
 
         assert parsed == f"It was a failure {CITATION_PLACEHOLDER}.\nResearch shows more."
         assert run == f"It was a failure {CITATION_PLACEHOLDER}. Research shows more."
+        assert subject == (
+            f"It lasts {CITATION_PLACEHOLDER}.\n{CITATION_PLACEHOLDER} showed that it causes harm."
+        )
 
     def test_heading_title_with_nested_commands(self):
         parsed = parse_latex(

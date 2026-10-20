@@ -667,9 +667,15 @@ class TestPreviouslyFixedBugs:
             "In 2015, the university introduced a mandatory study-skills module [citation]."
         )
 
+        dense = Linter().check(
+            "Most universities offer no structured support for these students [citation needed]."
+        )
+
         assert [f for f in result.flags if f.type in (FlagType.CITATION_NEEDED, FlagType.WEASEL)]
         assert [f for f in reminder.flags if f.type == FlagType.CITATION_NEEDED]
         assert not [f for f in reminder.flags if f.type == FlagType.JARGON_DENSE]
+        # Nor does the reminder dilute the sentence's jargon
+        assert [f for f in dense.flags if f.type == FlagType.JARGON_DENSE]
 
     def test_bug_citation_after_period_joined_next_sentence(self, tmp_path):
         """
