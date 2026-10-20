@@ -13,7 +13,6 @@ from academiclint.core.result import Flag, FlagType, Severity, Span
 from academiclint.density.calculator import (
     calculate_density,
     calculate_flag_penalty,
-    tokenize,
 )
 from tests.fixtures.real_papers import ALL_ABSTRACTS, BAD_WRITING_SAMPLES
 
@@ -35,9 +34,7 @@ class TestDensityCalibrationNoSpacy:
     def test_real_abstract_density_above_floor(self, config, discipline, abstract):
         """Real abstracts should achieve density >= 0.40 even without spaCy."""
         density = calculate_density(abstract, [], config)
-        assert density >= 0.40, (
-            f"{discipline}: density {density:.3f} below 0.40 floor"
-        )
+        assert density >= 0.40, f"{discipline}: density {density:.3f} below 0.40 floor"
 
     @pytest.mark.parametrize("label,text", list(BAD_WRITING_SAMPLES.items()))
     def test_bad_writing_density_documented(self, config, label, text):
@@ -52,19 +49,13 @@ class TestDensityCalibrationNoSpacy:
         density = calculate_density(text, [], config)
         # Bad writing without flags scores 0.78-0.93 (too high).
         # This ceiling documents current behavior, not a quality target.
-        assert density <= 1.0, (
-            f"{label}: density {density:.3f} exceeds maximum"
-        )
+        assert density <= 1.0, f"{label}: density {density:.3f} exceeds maximum"
 
     def test_separation_between_good_and_bad(self, config):
         """Average density of good writing should exceed average density of bad writing."""
-        good_densities = [
-            calculate_density(text, [], config)
-            for text in ALL_ABSTRACTS.values()
-        ]
+        good_densities = [calculate_density(text, [], config) for text in ALL_ABSTRACTS.values()]
         bad_densities = [
-            calculate_density(text, [], config)
-            for text in BAD_WRITING_SAMPLES.values()
+            calculate_density(text, [], config) for text in BAD_WRITING_SAMPLES.values()
         ]
 
         avg_good = sum(good_densities) / len(good_densities)
@@ -112,17 +103,27 @@ class TestDensityCalibrationNoSpacy:
         """Higher severity flags should produce larger penalties."""
         low_flags = [
             Flag(
-                type=FlagType.UNDERSPECIFIED, term="t", span=Span(0, 1),
-                line=1, column=1, severity=Severity.LOW,
-                message="", suggestion="",
+                type=FlagType.UNDERSPECIFIED,
+                term="t",
+                span=Span(0, 1),
+                line=1,
+                column=1,
+                severity=Severity.LOW,
+                message="",
+                suggestion="",
             )
             for _ in range(3)
         ]
         high_flags = [
             Flag(
-                type=FlagType.UNDERSPECIFIED, term="t", span=Span(0, 1),
-                line=1, column=1, severity=Severity.HIGH,
-                message="", suggestion="",
+                type=FlagType.UNDERSPECIFIED,
+                term="t",
+                span=Span(0, 1),
+                line=1,
+                column=1,
+                severity=Severity.HIGH,
+                message="",
+                suggestion="",
             )
             for _ in range(3)
         ]
@@ -136,9 +137,14 @@ class TestDensityCalibrationNoSpacy:
         """Flag penalty should never exceed 0.5 regardless of flag count."""
         many_flags = [
             Flag(
-                type=FlagType.UNDERSPECIFIED, term="t", span=Span(0, 1),
-                line=1, column=1, severity=Severity.HIGH,
-                message="", suggestion="",
+                type=FlagType.UNDERSPECIFIED,
+                term="t",
+                span=Span(0, 1),
+                line=1,
+                column=1,
+                severity=Severity.HIGH,
+                message="",
+                suggestion="",
             )
             for _ in range(100)
         ]

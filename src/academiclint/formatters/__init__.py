@@ -8,10 +8,10 @@ from academiclint.formatters.terminal import TerminalFormatter
 
 __all__ = [
     "Formatter",
-    "TerminalFormatter",
+    "GitHubFormatter",
     "JSONFormatter",
     "MarkdownFormatter",
-    "GitHubFormatter",
+    "TerminalFormatter",
     "get_formatter",
 ]
 
@@ -26,7 +26,7 @@ def get_formatter(format_type: str, **kwargs) -> Formatter:
     Returns:
         Formatter instance
     """
-    formatters = {
+    formatters: dict[str, type[Formatter]] = {
         "terminal": TerminalFormatter,
         "json": JSONFormatter,
         "markdown": MarkdownFormatter,

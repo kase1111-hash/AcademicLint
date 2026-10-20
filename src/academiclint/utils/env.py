@@ -19,8 +19,9 @@ Usage:
 
 import logging
 import os
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable, Optional, TypeVar
+from typing import Any, TypeVar, overload
 
 logger = logging.getLogger(__name__)
 
@@ -29,12 +30,9 @@ T = TypeVar("T")
 # Environment variable prefix for AcademicLint settings
 ENV_PREFIX = "ACADEMICLINT_"
 
-# Loaded environment variables cache
-_env_loaded = False
-
 
 def load_env(
-    path: Optional[Path | str] = None,
+    path: Path | str | None = None,
     override: bool = False,
 ) -> bool:
     """Load environment variables from a .env file.
@@ -51,8 +49,6 @@ def load_env(
         >>> load_env()  # Load from .env in current directory
         >>> load_env("/path/to/.env")  # Load from specific file
     """
-    global _env_loaded
-
     if path is None:
         # Search for .env file
         path = _find_env_file()
@@ -67,7 +63,6 @@ def load_env(
 
     try:
         _load_env_file(path, override)
-        _env_loaded = True
         logger.info("Loaded environment from: %s", path)
         return True
     except Exception as e:
@@ -75,7 +70,7 @@ def load_env(
         return False
 
 
-def _find_env_file() -> Optional[Path]:
+def _find_env_file() -> Path | None:
     """Search for .env file in current and parent directories."""
     current = Path.cwd()
 
@@ -95,8 +90,8 @@ def _find_env_file() -> Optional[Path]:
 def _load_env_file(path: Path, override: bool) -> None:
     """Parse and load a .env file."""
     with path.open() as f:
-        for line_num, line in enumerate(f, 1):
-            line = line.strip()
+        for line_num, raw_line in enumerate(f, 1):
+            line = raw_line.strip()
 
             # Skip empty lines and comments
             if not line or line.startswith("#"):
@@ -120,12 +115,22 @@ def _load_env_file(path: Path, override: bool) -> None:
                 os.environ[key] = value
 
 
+@overload
+def get_env(name: str, default: str, required: bool = ..., prefix: bool = ...) -> str: ...
+
+
+@overload
+def get_env(
+    name: str, default: None = None, required: bool = ..., prefix: bool = ...
+) -> str | None: ...
+
+
 def get_env(
     name: str,
-    default: Optional[str] = None,
+    default: str | None = None,
     required: bool = False,
     prefix: bool = True,
-) -> Optional[str]:
+) -> str | None:
     """Get an environment variable value.
 
     Args:
@@ -234,7 +239,7 @@ def get_env_float(
 
 def get_env_list(
     name: str,
-    default: Optional[list[str]] = None,
+    default: list[str] | None = None,
     separator: str = ",",
     prefix: bool = True,
 ) -> list[str]:
@@ -258,9 +263,9 @@ def get_env_list(
 
 def get_secret(
     name: str,
-    default: Optional[str] = None,
-    secrets_manager: Optional[Callable[[str], Optional[str]]] = None,
-) -> Optional[str]:
+    default: str | None = None,
+    secrets_manager: Callable[[str], str | None] | None = None,
+) -> str | None:
     """Get a secret value from environment or secrets manager.
 
     This function first checks the environment, then falls back to
@@ -350,13 +355,13 @@ class EnvConfig:
         return get_env_float("MIN_DENSITY", default=0.50)
 
     @property
-    def fail_under(self) -> Optional[float]:
+    def fail_under(self) -> float | None:
         """Fail if density is below this threshold."""
         value = get_env("FAIL_UNDER")
         return float(value) if value else None
 
     @property
-    def domain(self) -> Optional[str]:
+    def domain(self) -> str | None:
         """Domain name for specialized analysis."""
         return get_env("DOMAIN")
 
@@ -376,7 +381,7 @@ class EnvConfig:
         return get_env("LOG_LEVEL", default="WARNING")
 
     @property
-    def sentry_dsn(self) -> Optional[str]:
+    def sentry_dsn(self) -> str | None:
         """Sentry DSN for error tracking."""
         return get_secret("SENTRY_DSN")
 

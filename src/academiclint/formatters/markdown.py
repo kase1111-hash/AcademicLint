@@ -61,7 +61,7 @@ class MarkdownFormatter(Formatter):
             lines.append("")
 
             for i, flag in enumerate(para.flags, 1):
-                lines.append(f"{i}. **{flag.type.value}**: \"{flag.term}\"")
+                lines.append(f'{i}. **{flag.type.value}**: "{flag.term}"')
                 lines.append(f"   - {flag.message}")
                 lines.append(f"   - *Suggestion*: {flag.suggestion}")
                 if flag.example_revision:

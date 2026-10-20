@@ -109,15 +109,23 @@ fi
 echo ""
 
 # -----------------------------------------------------------------------------
-# Safety - Dependency Vulnerabilities
+# pip-audit - Dependency Vulnerabilities
 # -----------------------------------------------------------------------------
 echo -e "${YELLOW}[5/5] Checking dependencies for vulnerabilities...${NC}"
-if command -v safety &> /dev/null; then
-    if safety check --short-report 2>/dev/null || true; then
-        echo -e "${GREEN}✓ Dependency check complete${NC}"
+if command -v pip-audit &> /dev/null; then
+    # Audit installed third-party packages. This project (installed editable)
+    # and URL-installed spaCy models are not on PyPI, so leave them out.
+    AUDIT_REQS=$(mktemp)
+    pip freeze --exclude-editable | grep -v " @ " > "$AUDIT_REQS"
+    if pip-audit --strict --desc on --no-deps --disable-pip -r "$AUDIT_REQS"; then
+        echo -e "${GREEN}✓ No known vulnerabilities in dependencies${NC}"
+    else
+        echo -e "${RED}✗ pip-audit found vulnerable dependencies${NC}"
+        FAILED=1
     fi
+    rm -f "$AUDIT_REQS"
 else
-    echo -e "${YELLOW}⚠ Safety not installed, skipping dependency check${NC}"
+    echo -e "${YELLOW}⚠ pip-audit not installed, skipping dependency check${NC}"
 fi
 echo ""
 

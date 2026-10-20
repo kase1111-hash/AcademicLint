@@ -16,21 +16,19 @@ def cli():
 
 
 @cli.command()
-@click.argument("files", nargs=-1, type=click.Path(exists=True))
+@click.argument("files", nargs=-1, type=click.Path(exists=True, allow_dash=True))
 @click.option(
     "--level",
     type=click.Choice(["relaxed", "standard", "strict", "academic"]),
-    default="standard",
-    help="Strictness level",
+    help="Strictness level  [default: standard]",
 )
 @click.option(
     "--format",
     "output_format",
     type=click.Choice(["terminal", "json", "markdown", "github"]),
-    default="terminal",
-    help="Output format",
+    help="Output format  [default: terminal]",
 )
-@click.option("--min-density", type=float, default=0.5, help="Minimum acceptable density")
+@click.option("--min-density", type=float, help="Minimum acceptable density  [default: 0.5]")
 @click.option("--fail-under", type=float, help="Exit with error if density below threshold")
 @click.option("--domain", help="Use built-in domain vocabulary")
 @click.option("--domain-file", type=click.Path(exists=True), help="Use custom domain file")
@@ -55,7 +53,13 @@ def check(
     verbose,
     output,
 ):
-    """Analyze text for semantic clarity issues."""
+    """Analyze text for semantic clarity issues.
+
+    FILES may be files or directories (searched recursively for supported
+    files). With no FILES, or with "-", text is read from stdin.
+
+    Options given on the command line override values from --config.
+    """
     from academiclint.cli.check import run_check
 
     run_check(

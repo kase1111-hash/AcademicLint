@@ -43,6 +43,12 @@ class TestValidateText:
         with pytest.raises(ValidationError, match="cannot be empty"):
             validate_text("")
 
+    @pytest.mark.parametrize("text", ["   ", "\n\t\n", "\r\n\r\n", "\x00\x00", " \x00 "])
+    def test_blank_after_sanitizing_raises_error(self, text):
+        """Test that whitespace or null-byte-only text raises ValidationError."""
+        with pytest.raises(ValidationError, match="cannot be empty"):
+            validate_text(text)
+
     def test_exceeds_max_length(self):
         """Test that text exceeding max length raises error."""
         long_text = "a" * (MAX_TEXT_LENGTH + 1)
@@ -102,9 +108,7 @@ class TestValidateFilePath:
     def test_nonexistent_file_must_exist_false(self):
         """Test that nonexistent file with must_exist=False doesn't raise."""
         # This should not raise even if file doesn't exist
-        result = validate_file_path(
-            "/some/path/file.txt", must_exist=False, check_extension=True
-        )
+        result = validate_file_path("/some/path/file.txt", must_exist=False, check_extension=True)
         assert result is not None
 
     def test_unsupported_extension(self):
@@ -135,9 +139,11 @@ class TestValidateFilePath:
 
     def test_directory_raises_error(self):
         """Test that directory path raises error."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            with pytest.raises(ValidationError, match="not a file"):
-                validate_file_path(tmpdir)
+        with (
+            tempfile.TemporaryDirectory() as tmpdir,
+            pytest.raises(ValidationError, match="not a file"),
+        ):
+            validate_file_path(tmpdir)
 
     def test_accepts_path_object(self):
         """Test that Path object is accepted."""

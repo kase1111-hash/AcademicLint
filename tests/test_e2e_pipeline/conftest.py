@@ -10,11 +10,13 @@ def is_spacy_model_available():
     """Check if required spaCy model is available."""
     try:
         import spacy
+
         spacy.load("en_core_web_lg")
         return True
     except (ImportError, OSError):
         try:
             import spacy
+
             spacy.load("en_core_web_sm")
             return True
         except (ImportError, OSError):
@@ -24,7 +26,7 @@ def is_spacy_model_available():
 # Skip all tests in this package if model not available
 requires_spacy = pytest.mark.skipif(
     not is_spacy_model_available(),
-    reason="spaCy model not available. Run: python -m spacy download en_core_web_lg"
+    reason="spaCy model not available. Run: python -m spacy download en_core_web_lg",
 )
 
 

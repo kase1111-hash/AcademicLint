@@ -24,7 +24,7 @@ class AcademicLintError(Exception):
         details: Optional additional context about the error
     """
 
-    def __init__(self, message: str, details: str = None):
+    def __init__(self, message: str, details: str | None = None):
         self.message = message
         self.details = details
         super().__init__(self._format_message())
@@ -71,7 +71,7 @@ class ParsingError(AcademicLintError):
         - Encoding errors
     """
 
-    def __init__(self, message: str, file_path: str = None, line: int = None):
+    def __init__(self, message: str, file_path: str | None = None, line: int | None = None):
         self.file_path = file_path
         self.line = line
         details = None
@@ -97,10 +97,7 @@ class ModelNotFoundError(PipelineError):
     def __init__(self, model_name: str):
         self.model_name = model_name
         message = f"spaCy model '{model_name}' not found"
-        details = (
-            f"Install with: python -m spacy download {model_name}\n"
-            f"Or run: academiclint setup"
-        )
+        details = f"Install with: python -m spacy download {model_name}\nOr run: academiclint setup"
         super().__init__(message, details)
 
 
@@ -112,7 +109,7 @@ class ProcessingError(PipelineError):
         - Unexpected spaCy error
     """
 
-    def __init__(self, message: str, original_error: Exception = None):
+    def __init__(self, message: str, original_error: Exception | None = None):
         self.original_error = original_error
         details = str(original_error) if original_error else None
         super().__init__(message, details)
@@ -125,7 +122,7 @@ class DetectorError(AcademicLintError):
         detector_name: Name of the detector that failed
     """
 
-    def __init__(self, message: str, detector_name: str = None):
+    def __init__(self, message: str, detector_name: str | None = None):
         self.detector_name = detector_name
         details = f"detector={detector_name}" if detector_name else None
         super().__init__(message, details)
@@ -139,7 +136,7 @@ class FormatterError(AcademicLintError):
         - Invalid format specification
     """
 
-    def __init__(self, message: str, format_name: str = None):
+    def __init__(self, message: str, format_name: str | None = None):
         self.format_name = format_name
         details = f"format={format_name}" if format_name else None
         super().__init__(message, details)
@@ -150,11 +147,11 @@ class FormatterError(AcademicLintError):
 __all__ = [
     "AcademicLintError",
     "ConfigurationError",
-    "ValidationError",
-    "ParsingError",
-    "PipelineError",
-    "ModelNotFoundError",
-    "ProcessingError",
     "DetectorError",
     "FormatterError",
+    "ModelNotFoundError",
+    "ParsingError",
+    "PipelineError",
+    "ProcessingError",
+    "ValidationError",
 ]

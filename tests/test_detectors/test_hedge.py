@@ -27,7 +27,7 @@ class MockDoc:
 
     def get_sentence_for_span(self, start, end):
         for sent in self.sentences:
-            if hasattr(sent, 'span') and sent.span.start <= start and end <= sent.span.end:
+            if hasattr(sent, "span") and sent.span.start <= start and end <= sent.span.end:
                 return sent
         return None
 
@@ -119,8 +119,7 @@ class TestHedgeDetector:
         flags = detector.detect(doc, config)
 
         high_severity = [
-            f for f in flags
-            if f.type == FlagType.HEDGE_STACK and f.severity == Severity.HIGH
+            f for f in flags if f.type == FlagType.HEDGE_STACK and f.severity == Severity.HIGH
         ]
         # If there are 5+ hedges, severity should be HIGH
         if any("5" in f.term or "6" in f.term for f in flags):

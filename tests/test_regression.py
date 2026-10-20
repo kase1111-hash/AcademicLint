@@ -12,17 +12,17 @@ Organization:
 """
 
 import tempfile
-from pathlib import Path
 
 import pytest
 
 from academiclint import Config, Linter
+from academiclint.core.exceptions import ConfigurationError, ValidationError
 from academiclint.core.result import AnalysisResult, FlagType, Severity
-
 
 # =============================================================================
 # Edge Cases and Boundary Conditions
 # =============================================================================
+
 
 class TestEdgeCases:
     """Tests for edge cases and boundary conditions."""
@@ -76,9 +76,7 @@ class TestEdgeCases:
 
     def test_text_with_urls(self):
         """Text containing URLs should be handled."""
-        result = Linter().check(
-            "Visit https://example.com/path?query=1 for more info."
-        )
+        result = Linter().check("Visit https://example.com/path?query=1 for more info.")
         assert isinstance(result, AnalysisResult)
 
     def test_text_with_emails(self):
@@ -157,6 +155,7 @@ class TestBoundaryConditions:
 # Known Problematic Inputs
 # =============================================================================
 
+
 class TestProblematicInputs:
     """Tests for inputs known to be problematic."""
 
@@ -198,7 +197,7 @@ class TestProblematicInputs:
 
     def test_nested_quotes(self):
         """Nested quotes should be handled."""
-        result = Linter().check('He said "she said \'hello\' to me".')
+        result = Linter().check("He said \"she said 'hello' to me\".")
         assert isinstance(result, AnalysisResult)
 
     def test_unbalanced_parentheses(self):
@@ -242,6 +241,7 @@ class TestProblematicInputs:
 # =============================================================================
 # Behavior Preservation Tests
 # =============================================================================
+
 
 class TestBehaviorPreservation:
     """Tests ensuring specific behaviors are preserved."""
@@ -354,6 +354,7 @@ class TestBehaviorPreservation:
 # Previously Fixed Bugs (Documented)
 # =============================================================================
 
+
 class TestPreviouslyFixedBugs:
     """
     Tests for previously fixed bugs to prevent regression.
@@ -453,10 +454,97 @@ class TestPreviouslyFixedBugs:
         ids = [result1.id, result2.id, result3.id]
         assert len(ids) == len(set(ids)), "Result IDs not unique"
 
+    def test_bug_leading_whitespace_drops_first_sentence(self):
+        """
+        Bug: spaCy folds leading whitespace into the first sentence, so it
+        started before its paragraph and was never assigned to it.
+        Original: First paragraph had 0 words/sentences, density 0.0, and
+        patterns anchored at the sentence start never matched it.
+        Expected: Leading whitespace is ignored.
+        """
+        result = Linter().check("\n    Freedom is the state of being free.\n")
+
+        para = result.paragraphs[0]
+        assert para.sentence_count == 1
+        assert para.word_count > 0
+        circular = [f for f in result.flags if f.type == FlagType.CIRCULAR]
+        assert len(circular) == 1
+        assert circular[0].line == 2
+
+    def test_bug_sentence_spans_paragraphs(self):
+        """
+        Bug: A sentence without terminal punctuation (e.g. a Markdown heading)
+        ran on into the next paragraph and was credited only to the first.
+        Original: Body paragraphs after headings had 0 words and density 0.0.
+        Expected: Sentences never cross a blank line.
+        """
+        text = "Introduction\n\nThis paragraph explains the method in detail."
+        result = Linter().check(text)
+
+        assert result.summary.paragraph_count == 2
+        for para in result.paragraphs:
+            assert para.sentence_count == 1
+            assert para.word_count > 0
+            assert para.density > 0.0
+
+    def test_bug_flags_dropped_from_result(self):
+        """
+        Bug: Flags were only kept if they started inside a paragraph's span,
+        so a sentence-level flag starting in leading whitespace vanished.
+        Original: summary.flag_count counted flags missing from result.flags.
+        Expected: Every detected flag appears in the result.
+        """
+        result = Linter().check("\n73% of students prefer online learning.\n")
+
+        assert len(result.flags) == result.summary.flag_count
+        assert any(f.type == FlagType.CITATION_NEEDED for f in result.flags)
+
+    def test_bug_pattern_matches_across_paragraphs(self):
+        """
+        Bug: Multi-word patterns joined by \\s+ matched across blank lines.
+        Original: A "Results" heading followed by "In a study..." was flagged
+        as the causal claim "results in".
+        Expected: Matches stay within a paragraph; line breaks inside one
+        paragraph are still matched.
+        """
+        heading = Linter().check("Results\n\nIn a study of 500 participants, scores rose.")
+        wrapped = Linter().check("The policy results\nin lower costs.")
+
+        assert not [f for f in heading.flags if f.type == FlagType.UNSUPPORTED_CAUSAL]
+        assert [f for f in wrapped.flags if f.type == FlagType.UNSUPPORTED_CAUSAL]
+
+    def test_bug_domain_vocabulary_ignored(self):
+        """
+        Bug: Config.domain / domain_file were accepted but never used.
+        Original: Domain terms were flagged as jargon regardless of --domain.
+        Expected: Terms from the domain vocabulary are not flagged as jargon,
+        and the caller's Config is left unchanged.
+        """
+        text = (
+            "Phenomenology and hermeneutics reject naive empiricism, rationalism and materialism."
+        )
+        config = Config(domain="philosophy")
+
+        plain = Linter().check(text)
+        with_domain = Linter(config).check(text)
+
+        assert [f for f in plain.flags if f.type == FlagType.JARGON_DENSE]
+        assert not [f for f in with_domain.flags if f.type == FlagType.JARGON_DENSE]
+        assert config.domain_terms == []
+
+    def test_bug_unknown_domain_silently_ignored(self):
+        """
+        Bug: An unknown domain name was accepted without any error.
+        Expected: ConfigurationError naming the built-in domains.
+        """
+        with pytest.raises(ConfigurationError, match="Unknown domain 'medicine'"):
+            Linter(Config(domain="medicine")).check("Some text to analyze.")
+
 
 # =============================================================================
 # Performance Regression Guards
 # =============================================================================
+
 
 class TestPerformanceRegression:
     """Tests to guard against performance regressions."""
@@ -478,6 +566,7 @@ class TestPerformanceRegression:
         """Repeated analysis should have consistent timing."""
         text = "Test sentence for timing consistency check."
         linter = Linter()
+        linter.check(text)  # Warm up: the first call loads the spaCy model
 
         times = []
         for _ in range(3):
@@ -494,14 +583,13 @@ class TestPerformanceRegression:
 # File Handling Regression Tests
 # =============================================================================
 
+
 class TestFileHandlingRegression:
     """Tests for file handling regressions."""
 
     def test_file_with_bom(self):
         """Files with BOM should be handled."""
-        with tempfile.NamedTemporaryFile(
-            mode="wb", suffix=".txt", delete=False
-        ) as f:
+        with tempfile.NamedTemporaryFile(mode="wb", suffix=".txt", delete=False) as f:
             # Write UTF-8 BOM + content
             f.write(b"\xef\xbb\xbfTest content here.")
             f.flush()
@@ -524,30 +612,27 @@ class TestFileHandlingRegression:
 
     def test_empty_file(self):
         """Empty files should raise appropriate error."""
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".txt", delete=False
-        ) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
             f.write("")
             f.flush()
 
-            with pytest.raises(Exception):  # ValidationError or similar
+            with pytest.raises(ValidationError):
                 Linter().check_file(f.name)
 
     def test_file_only_whitespace(self):
         """Files with only whitespace should raise error."""
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".txt", delete=False
-        ) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
             f.write("   \n\n\t\t   ")
             f.flush()
 
-            with pytest.raises(Exception):
+            with pytest.raises(ValidationError):
                 Linter().check_file(f.name)
 
 
 # =============================================================================
 # Configuration Regression Tests
 # =============================================================================
+
 
 class TestConfigurationRegression:
     """Tests for configuration handling regressions."""

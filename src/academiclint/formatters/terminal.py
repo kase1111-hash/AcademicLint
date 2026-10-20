@@ -6,11 +6,17 @@ from academiclint.core.result import AnalysisResult, Flag
 from academiclint.formatters.base import Formatter
 
 
+def _inline(text: str) -> str:
+    """Collapse whitespace (including line breaks) so text fits on one line."""
+    return " ".join(text.split())
+
+
 class TerminalFormatter(Formatter):
     """Formatter for terminal/console output."""
 
-    def __init__(self, color: bool = True):
+    def __init__(self, color: bool = True, quiet: bool = False, **kwargs):
         self.color = color
+        self.quiet = quiet  # Only show the summary
 
     def format(self, result: AnalysisResult) -> str:
         """Format analysis result for terminal display."""
@@ -18,7 +24,7 @@ class TerminalFormatter(Formatter):
 
         # Format each paragraph with flags
         for para in result.paragraphs:
-            if para.flags:
+            if para.flags and not self.quiet:
                 lines.append(self._format_paragraph(para))
                 lines.append("")
 
@@ -36,7 +42,8 @@ class TerminalFormatter(Formatter):
         lines.append("")
 
         # Show text excerpt
-        text_preview = para.text[:100] + "..." if len(para.text) > 100 else para.text
+        text = _inline(para.text)
+        text_preview = text[:100] + "..." if len(text) > 100 else text
         lines.append(f'  "{text_preview}"')
         lines.append("")
 
@@ -55,7 +62,7 @@ class TerminalFormatter(Formatter):
         lines = []
 
         # Flag type and term
-        lines.append(f"  {prefix} FLAG: \"{flag.term}\" → {flag.type.value}")
+        lines.append(f'  {prefix} FLAG: "{_inline(flag.term)}" → {flag.type.value}')
 
         # Message
         lines.append(f"  │   {flag.message}")

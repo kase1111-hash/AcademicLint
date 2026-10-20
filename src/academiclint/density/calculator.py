@@ -1,10 +1,9 @@
 """Semantic density calculation for AcademicLint."""
 
 import re
-from typing import Optional
 
 from academiclint.core.config import Config
-from academiclint.core.result import Flag, FlagType, Severity
+from academiclint.core.result import Flag, Severity
 from academiclint.utils.patterns import FUNCTION_WORDS
 
 
@@ -12,7 +11,7 @@ def calculate_density(
     text: str,
     flags: list[Flag],
     config: Config,
-    tokens_with_lemmas: Optional[list[tuple[str, str, bool]]] = None,
+    tokens_with_lemmas: list[tuple[str, str, bool]] | None = None,
 ) -> float:
     """Calculate semantic density score for text.
 
@@ -46,7 +45,8 @@ def calculate_density(
 
         # 1. Content word ratio (non-stop words)
         content_tokens = [
-            (text, lemma) for text, lemma, is_stop in tokens_with_lemmas
+            (text, lemma)
+            for text, lemma, is_stop in tokens_with_lemmas
             if not is_stop and text.lower() not in FUNCTION_WORDS
         ]
         content_ratio = len(content_tokens) / token_count if token_count else 0
@@ -78,12 +78,7 @@ def calculate_density(
     precision = 1.0 - flag_penalty
 
     # Weighted combination
-    density = (
-        0.25 * content_ratio
-        + 0.25 * unique_ratio
-        + 0.20 * specificity
-        + 0.30 * precision
-    )
+    density = 0.25 * content_ratio + 0.25 * unique_ratio + 0.20 * specificity + 0.30 * precision
 
     return min(1.0, max(0.0, density))
 

@@ -9,6 +9,7 @@ This module verifies security measures including:
 - Safe error handling (no information leakage)
 """
 
+import contextlib
 import os
 import tempfile
 from pathlib import Path
@@ -24,10 +25,10 @@ from academiclint.utils.validation import (
     validate_text,
 )
 
-
 # =============================================================================
 # Input Validation Security Tests
 # =============================================================================
+
 
 class TestInputValidation:
     """Tests for secure input validation."""
@@ -99,6 +100,7 @@ class TestInputValidation:
 # Path Traversal Protection Tests
 # =============================================================================
 
+
 class TestPathTraversalProtection:
     """Tests for path traversal attack prevention."""
 
@@ -143,12 +145,13 @@ class TestPathTraversalProtection:
     def test_null_in_path_rejected(self):
         """Null bytes in paths should be rejected."""
         with pytest.raises((ValidationError, ValueError, TypeError)):
-            validate_file_path("/tmp/file\x00.txt")
+            validate_file_path("/tmp/file\x00.txt")  # noqa: S108
 
 
 # =============================================================================
 # Secret/Token Handling Tests
 # =============================================================================
+
 
 class TestSecretHandling:
     """Tests for secure handling of secrets and tokens."""
@@ -182,7 +185,7 @@ class TestSecretHandling:
 
         try:
             # Trigger an error condition
-            config = Config(level="invalid_level_value")
+            Config(level="invalid_level_value")
         except Exception as e:
             error_msg = str(e)
             assert "secret123" not in error_msg.lower()
@@ -230,6 +233,7 @@ class TestSecretHandling:
 # Regex Injection Prevention Tests
 # =============================================================================
 
+
 class TestRegexInjection:
     """Tests for ReDoS (regex denial of service) prevention."""
 
@@ -247,6 +251,7 @@ class TestRegexInjection:
                 result = sanitize_pattern(pattern)
                 # If not rejected, shouldn't take forever on evil input
                 import re
+
                 re.match(result, "a" * 20)  # Should complete quickly
             except ValidationError:
                 pass  # Rejection is acceptable
@@ -288,6 +293,7 @@ class TestRegexInjection:
 # =============================================================================
 # Resource Exhaustion Prevention Tests
 # =============================================================================
+
 
 class TestResourceExhaustion:
     """Tests for resource exhaustion (DoS) prevention."""
@@ -337,6 +343,7 @@ class TestResourceExhaustion:
 # Safe Error Handling Tests
 # =============================================================================
 
+
 class TestSafeErrorHandling:
     """Tests for safe error handling without information leakage."""
 
@@ -383,6 +390,7 @@ class TestSafeErrorHandling:
 # Configuration Security Tests
 # =============================================================================
 
+
 class TestConfigurationSecurity:
     """Tests for secure configuration handling."""
 
@@ -412,22 +420,22 @@ class TestConfigurationSecurity:
             load_env(f.name)
 
             # Check no command was executed
-            assert os.environ.get("$(whoami)") is None or os.environ.get("$(whoami)") == "hacked"
+            value = os.environ.get("$(whoami)")  # noqa: SIM112 - injection attempt as a name
+            assert value is None or value == "hacked"
             # The literal string might be set, but command shouldn't execute
 
     def test_domain_file_path_validated(self):
         """Domain file paths should be validated."""
         # Attempting to use path traversal in domain_file
-        try:
-            config = Config(domain_file=Path("../../../etc/passwd"))
-            # If it gets here, the file shouldn't exist
-        except Exception:
-            pass  # Expected to fail validation
+        # Expected to fail validation; if it doesn't, the file shouldn't exist
+        with contextlib.suppress(Exception):
+            Config(domain_file=Path("../../../etc/passwd"))
 
 
 # =============================================================================
 # Output Security Tests
 # =============================================================================
+
 
 class TestOutputSecurity:
     """Tests for secure output handling."""
@@ -459,7 +467,7 @@ class TestOutputSecurity:
         try:
             int_ids = [int(id.replace("check_", "")) for id in ids]
             # If they're all sequential integers, that's a problem
-            diffs = [int_ids[i+1] - int_ids[i] for i in range(len(int_ids)-1)]
+            diffs = [int_ids[i + 1] - int_ids[i] for i in range(len(int_ids) - 1)]
             assert not all(d == 1 for d in diffs), "IDs appear sequential"
         except ValueError:
             pass  # Non-numeric IDs are fine
@@ -469,12 +477,12 @@ class TestOutputSecurity:
 # Dependency Security Tests
 # =============================================================================
 
+
 class TestDependencySecurity:
     """Tests related to dependency security."""
 
     def test_no_pickle_deserialization(self):
         """System shouldn't deserialize untrusted pickle data."""
-        import pickle
 
         # Create malicious pickle
         class Malicious:
@@ -491,23 +499,20 @@ class TestDependencySecurity:
     def test_yaml_safe_load_used(self):
         """YAML loading should use safe_load."""
         # Create a YAML config with potential exploit
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".yaml", delete=False
-        ) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
             # Python object instantiation attempt
             f.write("level: !!python/object:os.system ['echo hacked']\n")
             f.flush()
 
             # Should either reject or load safely
-            try:
+            with contextlib.suppress(Exception):
                 Config.from_file(f.name)
-            except Exception:
-                pass  # Expected to fail safely
 
 
 # =============================================================================
 # Subprocess Security Tests (SEC-03)
 # =============================================================================
+
 
 class TestSubprocessSecurity:
     """Tests for subprocess sandboxing and model name validation."""
@@ -578,6 +583,7 @@ class TestSubprocessSecurity:
 # =============================================================================
 # Default Configuration Security Tests (SEC-01)
 # =============================================================================
+
 
 class TestDefaultConfiguration:
     """Tests for secure default configuration values."""

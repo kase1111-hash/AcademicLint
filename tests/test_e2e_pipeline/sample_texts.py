@@ -48,6 +48,16 @@ GOOD_TEXT_SCIENTIFIC_EXPECTED = {
 # =============================================================================
 # LOW QUALITY TEXTS (Should have low density, many flags)
 # =============================================================================
+# Density expectations are relative to the GOOD_* texts above. The density
+# formula is not yet calibrated to absolute targets (see REFOCUS_PLAN.md,
+# Phase 3.5, and tests/calibration/), so asserting e.g. "density <= 0.5" pins
+# arbitrary weights rather than the property that matters: clear separation
+# between precise and vague writing.
+
+# Minimum gap between the lowest-scoring good text and a bad text
+MIN_DENSITY_GAP = 0.2
+# Grades that clearly vague writing must never receive
+HIGH_DENSITY_GRADES = ["dense", "crystalline"]
 
 BAD_TEXT_VAGUE = """
 In today's society, technology has had a significant impact on
@@ -61,10 +71,8 @@ implications are far-reaching and deserve further study.
 """
 
 BAD_TEXT_VAGUE_EXPECTED = {
-    "max_density": 0.5,
     "min_flag_count": 5,
     "expected_flag_types": ["UNDERSPECIFIED", "WEASEL", "FILLER"],
-    "density_grade_acceptable": ["vapor", "thin"],
 }
 
 BAD_TEXT_WEASEL = """
@@ -79,10 +87,8 @@ important, while others remain skeptical.
 """
 
 BAD_TEXT_WEASEL_EXPECTED = {
-    "max_density": 0.45,
     "min_flag_count": 6,
     "expected_flag_types": ["WEASEL"],
-    "density_grade_acceptable": ["vapor", "thin"],
 }
 
 
@@ -199,8 +205,7 @@ implications remain complex and deserve further study by scholars.
 """
 
 TEXT_MIXED_EXPECTED = {
-    "min_density": 0.25,
-    "max_density": 0.65,
+    # Overall density should fall between the bad and good texts
     "paragraph_count": 2,
     "first_paragraph_min_density": 0.5,
     "second_paragraph_max_density": 0.45,

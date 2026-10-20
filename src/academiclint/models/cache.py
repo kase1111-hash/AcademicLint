@@ -1,15 +1,15 @@
 """Model caching utilities for AcademicLint."""
 
 from pathlib import Path
-from typing import Optional
+from typing import Any
 
 
 class ModelCache:
     """Handles caching of loaded models."""
 
-    def __init__(self, cache_dir: Optional[Path] = None):
+    def __init__(self, cache_dir: Path | None = None):
         self.cache_dir = cache_dir or Path.home() / ".cache" / "academiclint"
-        self._loaded_models = {}
+        self._loaded_models: dict[str, Any] = {}
 
     def get(self, model_name: str):
         """Get a cached model.

@@ -1,6 +1,7 @@
 """Filler phrase detector for AcademicLint."""
 
 import re
+from typing import ClassVar
 
 from academiclint.core.config import Config
 from academiclint.core.pipeline import ProcessedDocument
@@ -13,7 +14,7 @@ class FillerDetector(Detector):
     """Detector for filler phrases that add no information."""
 
     # Suggestions as class constant for reusability
-    SUGGESTIONS = {
+    SUGGESTIONS: ClassVar[dict[str, str]] = {
         "in today's society": "Remove or specify which society and time period",
         "in today's world": "Remove or be specific about context",
         "throughout history": "Specify the time period and region",
@@ -65,6 +66,4 @@ class FillerDetector(Detector):
 
     def _get_suggestion(self, phrase: str) -> str:
         """Get suggestion for removing/replacing the filler."""
-        return self.SUGGESTIONS.get(
-            phrase.lower(), "Remove or replace with specific content"
-        )
+        return self.SUGGESTIONS.get(phrase.lower(), "Remove or replace with specific content")

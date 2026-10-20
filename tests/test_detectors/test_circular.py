@@ -27,7 +27,7 @@ class MockDoc:
 
     def get_sentence_for_span(self, start, end):
         for sent in self.sentences:
-            if hasattr(sent, 'span') and sent.span.start <= start and end <= sent.span.end:
+            if hasattr(sent, "span") and sent.span.start <= start and end <= sent.span.end:
                 return sent
         return None
 
@@ -171,3 +171,37 @@ class TestCircularDetector:
         flags = detector.detect(doc, config)
 
         assert len(flags) > 0
+
+    def test_definition_wrapped_across_lines(self, detector, config):
+        """A definition hard-wrapped onto the next line is still checked."""
+        text = "Creativity is the ability\nto be creative."
+        doc = MockDoc(
+            text=text,
+            sentences=[MockSentence(text=text, span=Span(0, len(text)))],
+        )
+        flags = detector.detect(doc, config)
+
+        assert len(flags) == 1
+
+    def test_article_is_whole_word(self, detector, config):
+        """An optional article must not consume the start of the next word."""
+        # "an" must not be stripped from "anarchic", leaving "archic"
+        text = "Anarchy is anarchic disorder."
+        doc = MockDoc(
+            text=text,
+            sentences=[MockSentence(text=text, span=Span(0, len(text)))],
+        )
+        flags = detector.detect(doc, config)
+
+        assert len(flags) == 1
+
+    def test_one_flag_per_sentence(self, detector, config):
+        """A sentence matching several definition patterns is flagged once."""
+        text = "Freedom is defined as the state of being free."
+        doc = MockDoc(
+            text=text,
+            sentences=[MockSentence(text=text, span=Span(0, len(text)))],
+        )
+        flags = detector.detect(doc, config)
+
+        assert len(flags) == 1

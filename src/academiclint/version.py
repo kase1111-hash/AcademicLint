@@ -22,7 +22,6 @@ Examples:
 
 import re
 from dataclasses import dataclass
-from typing import Optional
 
 # Single source of truth for version
 __version__ = "0.1.0"
@@ -31,8 +30,8 @@ __version__ = "0.1.0"
 VERSION_MAJOR = 0
 VERSION_MINOR = 1
 VERSION_PATCH = 0
-VERSION_PRERELEASE: Optional[str] = None
-VERSION_BUILD: Optional[str] = None
+VERSION_PRERELEASE: str | None = None
+VERSION_BUILD: str | None = None
 
 # Semantic version regex pattern
 SEMVER_PATTERN = re.compile(
@@ -62,8 +61,8 @@ class Version:
     major: int
     minor: int
     patch: int
-    prerelease: Optional[str] = None
-    build: Optional[str] = None
+    prerelease: str | None = None
+    build: str | None = None
 
     def __post_init__(self) -> None:
         """Validate version components."""
@@ -191,7 +190,7 @@ def get_version_tuple() -> tuple[int, int, int]:
 
 
 # Version compatibility checks
-def is_compatible(required: str, current: Optional[str] = None) -> bool:
+def is_compatible(required: str, current: str | None = None) -> bool:
     """Check if the current version is compatible with the required version.
 
     Uses caret (^) compatibility: same major version, minor >= required.

@@ -1,7 +1,5 @@
 """Tests for semantic density calculation."""
 
-import pytest
-
 from academiclint.core.config import Config
 from academiclint.core.result import Flag, FlagType, Severity, Span
 from academiclint.density.calculator import (

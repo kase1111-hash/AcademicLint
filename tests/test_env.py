@@ -2,7 +2,6 @@
 
 import os
 import tempfile
-from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
@@ -164,23 +163,26 @@ class TestGetEnv:
 class TestGetEnvBool:
     """Tests for get_env_bool function."""
 
-    @pytest.mark.parametrize("value,expected", [
-        ("true", True),
-        ("True", True),
-        ("TRUE", True),
-        ("1", True),
-        ("yes", True),
-        ("Yes", True),
-        ("on", True),
-        ("ON", True),
-        ("false", False),
-        ("False", False),
-        ("0", False),
-        ("no", False),
-        ("off", False),
-        ("", False),
-        ("invalid", False),
-    ])
+    @pytest.mark.parametrize(
+        "value,expected",
+        [
+            ("true", True),
+            ("True", True),
+            ("TRUE", True),
+            ("1", True),
+            ("yes", True),
+            ("Yes", True),
+            ("on", True),
+            ("ON", True),
+            ("false", False),
+            ("False", False),
+            ("0", False),
+            ("no", False),
+            ("off", False),
+            ("", False),
+            ("invalid", False),
+        ],
+    )
     def test_bool_parsing(self, value, expected):
         """Test boolean parsing for various values."""
         os.environ["ACADEMICLINT_BOOL_TEST"] = value
@@ -379,8 +381,16 @@ class TestEnvConfig:
     def test_default_values(self):
         """Test default configuration values."""
         # Clear any env vars that might affect defaults
-        for var in ["LEVEL", "MIN_DENSITY", "OUTPUT_FORMAT", "COLOR", "LOG_LEVEL",
-                    "API_HOST", "API_PORT", "WORKERS"]:
+        for var in [
+            "LEVEL",
+            "MIN_DENSITY",
+            "OUTPUT_FORMAT",
+            "COLOR",
+            "LOG_LEVEL",
+            "API_HOST",
+            "API_PORT",
+            "WORKERS",
+        ]:
             os.environ.pop(f"ACADEMICLINT_{var}", None)
         os.environ.pop("SENTRY_DSN", None)
 
@@ -406,8 +416,18 @@ class TestEnvConfig:
 
     def test_to_dict(self):
         """Test to_dict method."""
-        for var in ["LEVEL", "MIN_DENSITY", "OUTPUT_FORMAT", "COLOR", "LOG_LEVEL",
-                    "API_HOST", "API_PORT", "WORKERS", "DOMAIN", "FAIL_UNDER"]:
+        for var in [
+            "LEVEL",
+            "MIN_DENSITY",
+            "OUTPUT_FORMAT",
+            "COLOR",
+            "LOG_LEVEL",
+            "API_HOST",
+            "API_PORT",
+            "WORKERS",
+            "DOMAIN",
+            "FAIL_UNDER",
+        ]:
             os.environ.pop(f"ACADEMICLINT_{var}", None)
 
         config = EnvConfig()

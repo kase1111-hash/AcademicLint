@@ -2,6 +2,7 @@
 
 import re
 from abc import ABC, abstractmethod
+from collections.abc import Iterator
 
 from academiclint.core.config import Config
 from academiclint.core.pipeline import ProcessedDocument
@@ -35,6 +36,23 @@ class Detector(ABC):
     # Shared helper methods for all detectors (DRY principle)
     # =========================================================================
 
+    @staticmethod
+    def finditer_in_paragraphs(pattern: str, text: str, flags: int = 0) -> Iterator[re.Match[str]]:
+        """Like re.finditer, but a match never spans a paragraph break.
+
+        Multi-word patterns join words with \\s+, which would otherwise match
+        across a blank line, e.g. a "Results" heading followed by a paragraph
+        starting "In ..." reads as the causal phrase "results in".
+        """
+        compiled = re.compile(pattern, flags)
+        start = 0
+        while True:
+            brk = text.find("\n\n", start)
+            yield from compiled.finditer(text, start, len(text) if brk == -1 else brk)
+            if brk == -1:
+                return
+            start = brk + 2
+
     def get_line_column(self, text: str, position: int) -> tuple[int, int]:
         """Get line and column number for a character position.
 
@@ -51,14 +69,46 @@ class Detector(ABC):
         return line, column
 
     # Common abbreviations that contain periods but don't end sentences
-    _ABBREVIATIONS = frozenset({
-        "dr.", "mr.", "mrs.", "ms.", "prof.", "sr.", "jr.",
-        "etc.", "e.g.", "i.e.", "vs.", "viz.", "cf.",
-        "fig.", "eq.", "no.", "vol.", "pp.", "ch.",
-        "inc.", "ltd.", "corp.", "co.", "dept.",
-        "jan.", "feb.", "mar.", "apr.", "jun.", "jul.",
-        "aug.", "sep.", "sept.", "oct.", "nov.", "dec.",
-    })
+    _ABBREVIATIONS = frozenset(
+        {
+            "dr.",
+            "mr.",
+            "mrs.",
+            "ms.",
+            "prof.",
+            "sr.",
+            "jr.",
+            "etc.",
+            "e.g.",
+            "i.e.",
+            "vs.",
+            "viz.",
+            "cf.",
+            "fig.",
+            "eq.",
+            "no.",
+            "vol.",
+            "pp.",
+            "ch.",
+            "inc.",
+            "ltd.",
+            "corp.",
+            "co.",
+            "dept.",
+            "jan.",
+            "feb.",
+            "mar.",
+            "apr.",
+            "jun.",
+            "jul.",
+            "aug.",
+            "sep.",
+            "sept.",
+            "oct.",
+            "nov.",
+            "dec.",
+        }
+    )
 
     def _is_sentence_boundary(self, text: str, period_pos: int) -> bool:
         """Check if a period at the given position is a sentence boundary.
@@ -80,7 +130,7 @@ class Detector(ABC):
 
         if word_start < period_pos:
             # Include the period in the potential abbreviation
-            potential_abbrev = text[word_start:period_pos + 1].lower()
+            potential_abbrev = text[word_start : period_pos + 1].lower()
             if potential_abbrev in self._ABBREVIATIONS:
                 return False
 
@@ -94,10 +144,7 @@ class Detector(ABC):
             return True
         if text[next_pos] == "\n":
             return True
-        if text[next_pos].isupper():
-            return True
-
-        return False
+        return bool(text[next_pos].isupper())
 
     def get_sentence_context(self, text: str, start: int, end: int) -> str:
         """Extract the sentence containing a span.
@@ -173,10 +220,7 @@ class Detector(ABC):
         else:
             search_region = text[position : position + window]
 
-        for pattern in CITATION_PATTERNS:
-            if re.search(pattern, search_region):
-                return True
-        return False
+        return any(re.search(pattern, search_region) for pattern in CITATION_PATTERNS)
 
     def has_citation_in_sentence(self, doc, match_start: int, match_end: int) -> bool:
         """Check if there's a citation anywhere in the same sentence as the match.
@@ -194,10 +238,7 @@ class Detector(ABC):
         """
         sentence = doc.get_sentence_for_span(match_start, match_end)
         if sentence is not None:
-            for pattern in CITATION_PATTERNS:
-                if re.search(pattern, sentence.text):
-                    return True
-            return False
+            return any(re.search(pattern, sentence.text) for pattern in CITATION_PATTERNS)
 
         # Fallback: if no sentence structure, use window-based check
         return self.has_nearby_citation(doc.text, match_end)
@@ -212,7 +253,7 @@ class Detector(ABC):
         severity,
         message: str,
         suggestion: str,
-        example_revision: str = None,
+        example_revision: str | None = None,
         use_sentence_context: bool = True,
     ) -> Flag:
         """Create a Flag with common boilerplate handled.

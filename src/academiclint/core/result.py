@@ -2,7 +2,6 @@
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Optional
 
 
 class FlagType(Enum):
@@ -50,7 +49,7 @@ class Flag:
     severity: Severity
     message: str  # Human-readable explanation
     suggestion: str  # How to fix it
-    example_revision: Optional[str] = None  # Concrete rewrite example
+    example_revision: str | None = None  # Concrete rewrite example
     context: str = ""  # Surrounding text for display
 
     def to_dict(self) -> dict:

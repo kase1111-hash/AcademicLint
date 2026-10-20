@@ -13,15 +13,13 @@ User Stories Covered:
 import tempfile
 from pathlib import Path
 
-import pytest
-
 from academiclint import Config, Linter, __version__
 from academiclint.core.result import AnalysisResult, FlagType, Severity
-
 
 # =============================================================================
 # User Story 1: Researcher analyzing paper for vague language
 # =============================================================================
+
 
 class TestResearcherVagueLanguageAnalysis:
     """
@@ -63,7 +61,8 @@ class TestResearcherVagueLanguageAnalysis:
         # Find any underspecified/vague flags
         all_flags = [f for p in result.paragraphs for f in p.flags]
         vague_flags = [
-            f for f in all_flags
+            f
+            for f in all_flags
             if f.type in [FlagType.UNDERSPECIFIED, FlagType.WEASEL, FlagType.FILLER]
         ]
 
@@ -114,6 +113,7 @@ class TestResearcherVagueLanguageAnalysis:
 # =============================================================================
 # User Story 2: Student identifying unsupported causal claims
 # =============================================================================
+
 
 class TestStudentCausalClaimIdentification:
     """
@@ -182,10 +182,7 @@ class TestStudentCausalClaimIdentification:
         all_flags = [f for p in result.paragraphs for f in p.flags]
 
         # Check if any suggestion mentions citation
-        has_citation_suggestion = any(
-            "cit" in (f.suggestion or "").lower()
-            for f in all_flags
-        )
+        has_citation_suggestion = any("cit" in (f.suggestion or "").lower() for f in all_flags)
 
         # Should suggest adding citation
         assert has_citation_suggestion or len(all_flags) > 0
@@ -194,6 +191,7 @@ class TestStudentCausalClaimIdentification:
 # =============================================================================
 # User Story 3: Editor checking semantic density across documents
 # =============================================================================
+
 
 class TestEditorSemanticDensityCheck:
     """
@@ -224,7 +222,7 @@ class TestEditorSemanticDensityCheck:
 
             # Should return results for all files
             assert len(results) == 3
-            for path, result in results.items():
+            for result in results.values():
                 assert isinstance(result, AnalysisResult)
 
     def test_density_scores_comparable(self):
@@ -250,9 +248,7 @@ class TestEditorSemanticDensityCheck:
         result = linter.check(text)
 
         # Should have a grade label
-        assert result.summary.density_grade in [
-            "vapor", "thin", "adequate", "dense", "crystalline"
-        ]
+        assert result.summary.density_grade in ["vapor", "thin", "adequate", "dense", "crystalline"]
 
     def test_identify_lowest_quality_paragraphs(self):
         """Can identify which paragraphs need most attention."""
@@ -279,6 +275,7 @@ class TestEditorSemanticDensityCheck:
 # =============================================================================
 # User Story 4: Developer integrating AcademicLint into workflow
 # =============================================================================
+
 
 class TestDeveloperIntegration:
     """
@@ -342,6 +339,7 @@ class TestDeveloperIntegration:
 # End-to-End Workflow Tests
 # =============================================================================
 
+
 class TestEndToEndWorkflows:
     """Complete end-to-end workflow tests."""
 
@@ -373,9 +371,7 @@ class TestEndToEndWorkflows:
         the complex dynamics at play here.
         """
 
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".md", delete=False
-        ) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False) as f:
             f.write(paper_content)
             f.flush()
 
@@ -438,6 +434,7 @@ class TestEndToEndWorkflows:
 # Acceptance Criteria Verification
 # =============================================================================
 
+
 class TestAcceptanceCriteria:
     """Tests verifying specific acceptance criteria are met."""
 
@@ -450,9 +447,7 @@ class TestAcceptanceCriteria:
 
         # Should flag vague quantifiers
         terms = [f.term.lower() for f in all_flags]
-        has_quantifier_flag = any(
-            "many" in t or "some" in t for t in terms
-        ) or len(all_flags) > 0
+        has_quantifier_flag = any("many" in t or "some" in t for t in terms) or len(all_flags) > 0
 
         assert has_quantifier_flag or result.summary.flag_count >= 0
 
@@ -495,9 +490,7 @@ class TestAcceptanceCriteria:
         content = "Test content for file format support."
 
         for ext in [".md", ".txt"]:
-            with tempfile.NamedTemporaryFile(
-                mode="w", suffix=ext, delete=False
-            ) as f:
+            with tempfile.NamedTemporaryFile(mode="w", suffix=ext, delete=False) as f:
                 f.write(content)
                 f.flush()
 
@@ -530,6 +523,7 @@ class TestAcceptanceCriteria:
 # =============================================================================
 # Real-World Document Tests
 # =============================================================================
+
 
 class TestRealWorldDocuments:
     """Tests with realistic academic document content."""
@@ -621,6 +615,7 @@ class TestRealWorldDocuments:
 # =============================================================================
 # Output Format Verification
 # =============================================================================
+
 
 class TestOutputFormats:
     """Tests verifying output format correctness."""

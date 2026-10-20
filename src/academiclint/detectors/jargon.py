@@ -23,7 +23,7 @@ class JargonDetector(Detector):
         flags = []
 
         # Build set of acceptable domain terms
-        domain_terms = set(t.lower() for t in config.domain_terms)
+        domain_terms = {t.lower() for t in config.domain_terms}
 
         for sentence in doc.sentences:
             jargon_terms = []
@@ -36,28 +36,31 @@ class JargonDetector(Detector):
             if len(words) > 0:
                 jargon_ratio = len(jargon_terms) / len(words)
 
-                if jargon_ratio > self.JARGON_THRESHOLD and len(jargon_terms) >= 3:
-                    # Check if terms are explained nearby
-                    if not self._has_explanations(sentence.text, jargon_terms):
-                        start = sentence.span.start
-                        end = sentence.span.end
+                # Flag dense jargon unless the terms are explained nearby
+                if (
+                    jargon_ratio > self.JARGON_THRESHOLD
+                    and len(jargon_terms) >= 3
+                    and not self._has_explanations(sentence.text, jargon_terms)
+                ):
+                    start = sentence.span.start
+                    end = sentence.span.end
 
-                        line = doc.text[:start].count("\n") + 1
-                        line_start = doc.text.rfind("\n", 0, start) + 1
-                        column = start - line_start + 1
+                    line = doc.text[:start].count("\n") + 1
+                    line_start = doc.text.rfind("\n", 0, start) + 1
+                    column = start - line_start + 1
 
-                        flag = Flag(
-                            type=FlagType.JARGON_DENSE,
-                            term=", ".join(jargon_terms[:5]),
-                            span=Span(start=start, end=end),
-                            line=line,
-                            column=column,
-                            severity=Severity.MEDIUM,
-                            message=f"{len(jargon_terms)} technical terms, {self._count_explanations(sentence.text)} explanations",
-                            suggestion="Define technical terms or specify intended audience",
-                            context=sentence.text,
-                        )
-                        flags.append(flag)
+                    flag = Flag(
+                        type=FlagType.JARGON_DENSE,
+                        term=", ".join(jargon_terms[:5]),
+                        span=Span(start=start, end=end),
+                        line=line,
+                        column=column,
+                        severity=Severity.MEDIUM,
+                        message=f"{len(jargon_terms)} technical terms, {self._count_explanations(sentence.text)} explanations",
+                        suggestion="Define technical terms or specify intended audience",
+                        context=sentence.text,
+                    )
+                    flags.append(flag)
 
         return flags
 

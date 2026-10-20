@@ -1,6 +1,7 @@
 """Circular definition detector for AcademicLint."""
 
 import re
+from typing import ClassVar
 
 from academiclint.core.config import Config
 from academiclint.core.pipeline import ProcessedDocument
@@ -13,24 +14,24 @@ class CircularDetector(Detector):
 
     # Patterns for definition structures
     # Each pattern should have two groups: (1) the term being defined, (2) the definition
-    DEFINITION_PATTERNS = [
+    DEFINITION_PATTERNS: ClassVar[list[str]] = [
         # "X is/are Y" - basic definition
-        r"(\w+)\s+(?:is|are|means?|refers?\s+to)\s+(?:a|an|the)?\s*(.*)",
+        r"(\w+)\s+(?:is|are|means?|refers?\s+to)\s+(?:(?:a|an|the)\s+)?(.*)",
         # "X: Y" - colon definition (e.g., "Freedom: the state of being free")
-        r"(\w+)\s*:\s+(?:a|an|the)?\s*(.*)",
+        r"(\w+)\s*:\s+(?:(?:a|an|the)\s+)?(.*)",
         # "We define X as Y" / "X is defined as Y"
-        r"(?:we\s+)?(?:can\s+)?define\s+(\w+)\s+as\s+(?:a|an|the)?\s*(.*)",
-        r"(\w+)\s+(?:is|are)\s+defined\s+as\s+(?:a|an|the)?\s*(.*)",
+        r"(?:we\s+)?(?:can\s+)?define\s+(\w+)\s+as\s+(?:(?:a|an|the)\s+)?(.*)",
+        r"(\w+)\s+(?:is|are)\s+defined\s+as\s+(?:(?:a|an|the)\s+)?(.*)",
         # "By X we mean Y"
-        r"by\s+(\w+)\s+(?:we|I)\s+mean\s+(?:a|an|the)?\s*(.*)",
+        r"by\s+(\w+)\s+(?:we|I)\s+mean\s+(?:(?:a|an|the)\s+)?(.*)",
         # "The definition of X is Y"
-        r"the\s+definition\s+of\s+(\w+)\s+is\s+(?:a|an|the)?\s*(.*)",
+        r"the\s+definition\s+of\s+(\w+)\s+is\s+(?:(?:a|an|the)\s+)?(.*)",
         # "X is when Y" (informal definition)
         r"(\w+)\s+is\s+when\s+(.*)",
         # "X is understood as Y"
-        r"(\w+)\s+(?:is|are)\s+understood\s+(?:as|to\s+be)\s+(?:a|an|the)?\s*(.*)",
+        r"(\w+)\s+(?:is|are)\s+understood\s+(?:as|to\s+be)\s+(?:(?:a|an|the)\s+)?(.*)",
         # "X is characterized by Y"
-        r"(\w+)\s+(?:is|are)\s+characterized\s+(?:by|as)\s+(?:a|an|the)?\s*(.*)",
+        r"(\w+)\s+(?:is|are)\s+characterized\s+(?:by|as)\s+(?:(?:a|an|the)\s+)?(.*)",
         # "X, that is, Y" / "X, i.e., Y" / "X, namely Y"
         r"(\w+)\s*,\s*(?:that\s+is|i\.?e\.?|namely)\s*,?\s*(.*)",
     ]
@@ -45,7 +46,7 @@ class CircularDetector(Detector):
 
         for sentence in doc.sentences:
             for pattern in self.DEFINITION_PATTERNS:
-                match = re.match(pattern, sentence.text, re.IGNORECASE)
+                match = re.match(pattern, sentence.text, re.IGNORECASE | re.DOTALL)
                 if match:
                     term = match.group(1)
                     definition = match.group(2)
@@ -72,6 +73,7 @@ class CircularDetector(Detector):
                             context=sentence.text,
                         )
                         flags.append(flag)
+                        break  # One flag per sentence
 
         return flags
 
@@ -91,9 +93,7 @@ class CircularDetector(Detector):
                 return True
             # Prefix match: handles cases like justice/just, democracy/democr
             if len(term_root) >= 4 and len(word_root) >= 4:
-                shorter, longer = sorted(
-                    [term_root, word_root], key=len
-                )
+                shorter, longer = sorted([term_root, word_root], key=len)
                 if longer.startswith(shorter):
                     return True
 
@@ -107,11 +107,35 @@ class CircularDetector(Detector):
         """
         # Ordered longest-first so "ization" matches before "tion"
         suffixes = [
-            "ization", "isation", "ological", "ically",
-            "ation", "ition", "ness", "ment", "tion", "sion",
-            "ible", "able", "ical", "atic", "ious", "eous",
-            "ive", "ity", "dom", "ism", "ist", "ful",
-            "ing", "ed", "er", "est", "ly", "al", "ic",
+            "ization",
+            "isation",
+            "ological",
+            "ically",
+            "ation",
+            "ition",
+            "ness",
+            "ment",
+            "tion",
+            "sion",
+            "ible",
+            "able",
+            "ical",
+            "atic",
+            "ious",
+            "eous",
+            "ive",
+            "ity",
+            "dom",
+            "ism",
+            "ist",
+            "ful",
+            "ing",
+            "ed",
+            "er",
+            "est",
+            "ly",
+            "al",
+            "ic",
         ]
 
         root = word

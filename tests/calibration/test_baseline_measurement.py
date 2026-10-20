@@ -9,9 +9,9 @@ import pytest
 
 spacy = pytest.importorskip("spacy", reason="spaCy required for baseline measurement")
 
-from academiclint import Config, Linter
-from academiclint.core.result import FlagType
-from tests.fixtures.real_papers import ALL_ABSTRACTS, BAD_WRITING_SAMPLES
+from academiclint import Config, Linter  # noqa: E402
+from academiclint.core.result import FlagType  # noqa: E402
+from tests.fixtures.real_papers import ALL_ABSTRACTS, BAD_WRITING_SAMPLES  # noqa: E402
 
 
 @pytest.fixture(scope="module")
@@ -71,8 +71,7 @@ class TestBaselineBadWriting:
         """Vague essay should produce multiple vagueness flags."""
         result = linter.check(BAD_WRITING_SAMPLES["vague_essay"])
         vague_flags = [
-            f for f in result.flags
-            if f.type in (FlagType.UNDERSPECIFIED, FlagType.FILLER)
+            f for f in result.flags if f.type in (FlagType.UNDERSPECIFIED, FlagType.FILLER)
         ]
         assert len(vague_flags) >= 3, (
             f"Only {len(vague_flags)} vagueness/filler flags on intentionally vague text"
@@ -81,7 +80,7 @@ class TestBaselineBadWriting:
     def test_circular_definitions_flagged(self, linter):
         """Circular definitions should be caught."""
         result = linter.check(BAD_WRITING_SAMPLES["circular_definitions"])
-        circular_flags = [f for f in result.flags if f.type == FlagType.CIRCULAR_DEFINITION]
+        circular_flags = [f for f in result.flags if f.type == FlagType.CIRCULAR]
         assert len(circular_flags) >= 2, (
             f"Only {len(circular_flags)} circular flags on 4 circular definitions"
         )

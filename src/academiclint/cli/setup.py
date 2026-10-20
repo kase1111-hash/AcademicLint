@@ -1,14 +1,14 @@
 """Setup command implementation for AcademicLint CLI."""
 
-import subprocess
-from typing import Optional
+import subprocess  # nosec B404
+import sys
 
 import click
 
 from academiclint.models.manager import MODEL_DOWNLOAD_TIMEOUT, ModelManager
 
 
-def run_setup(models: Optional[str], force: bool, offline: bool):
+def run_setup(models: str | None, force: bool, offline: bool):
     """Run the setup command to download models."""
     click.echo("Setting up AcademicLint...")
 
@@ -18,10 +18,7 @@ def run_setup(models: Optional[str], force: bool, offline: bool):
         return
 
     # Determine which models to download
-    if models:
-        model_list = [m.strip() for m in models.split(",")]
-    else:
-        model_list = ["en_core_web_lg"]
+    model_list = [m.strip() for m in models.split(",")] if models else ["en_core_web_lg"]
 
     # Validate and download spaCy models
     for model in model_list:
@@ -53,11 +50,14 @@ def download_spacy_model(model: str, force: bool = False):
                 pass
 
         # Download the model
-        result = subprocess.run(
-            ["python", "-m", "spacy", "download", model],
+        # Use this interpreter so the model lands in the environment that runs
+        # academiclint; `model` was checked by ModelManager.validate_model_name.
+        result = subprocess.run(  # noqa: S603  # nosec B603
+            [sys.executable, "-m", "spacy", "download", model],
             capture_output=True,
             text=True,
             timeout=MODEL_DOWNLOAD_TIMEOUT,
+            check=False,
         )
 
         if result.returncode == 0:
