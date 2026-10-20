@@ -122,6 +122,43 @@ _SENTENCE_END = re.compile(rf"[.!?][\"'\u201d\u2019)\]]*(?:\s*(?:{_CITATION_OR_R
 _CITATION_CLOSE = (CITATION_PLACEHOLDER[-1], "]")
 # Penn Treebank tags of finite verbs
 _FINITE_VERB = frozenset({"VBD", "VBZ", "VBP", "MD"})
+_CITATION_FULL = re.compile(_CITATION)
+_REMINDER = re.compile("|".join(f"(?:{pattern})" for pattern in CITATION_REMINDERS))
+# Words a citation is the object of in "As reported in [12]", "according to [4]"
+_PREPOSITIONS = frozenset(
+    {
+        "in",
+        "of",
+        "to",
+        "by",
+        "from",
+        "with",
+        "see",
+        "cf",
+        "on",
+        "at",
+        "for",
+        "per",
+        "like",
+        "unlike",
+    }
+)
+# Words opening a subordinate clause: in "Although X is unclear, many
+# researchers\n[12] argue...", the verb before the comma is not the line's own
+_SUBORDINATORS = frozenset(
+    {
+        "although",
+        "though",
+        "while",
+        "whereas",
+        "because",
+        "since",
+        "if",
+        "unless",
+        "when",
+        "despite",
+    }
+)
 
 
 class NLPPipeline:
@@ -305,7 +342,8 @@ class NLPPipeline:
         spans: list[Any] = []
         pending = sorted(starts)
         next_start = 0
-        before = ("", "")  # The two previous non-space tokens' text
+        recent: list[Any] = []  # The last few non-space tokens
+        finite = False  # Whether the span so far has a finite verb (is a clause)
 
         def add(span: Any, may_merge: bool) -> None:
             if may_merge and spans and NLPPipeline._continues_with_citation(spans[-1], span):
@@ -328,37 +366,77 @@ class NLPPipeline:
                 offset = token.idx - sent.start_char
                 if prev_end is None:
                     may_merge = not forced
+                    finite = False
                 elif (
                     forced
                     or "\n\n" in sent_text[prev_end:offset]
                     or (
                         token.text[:1].isupper()
-                        and NLPPipeline._cited_end(before, sent_text[prev_end:offset])
+                        and NLPPipeline._cited_end(recent, sent_text[prev_end:offset], finite)
                     )
                 ):
                     add(doc[start : token.i], may_merge)
                     start = token.i
                     may_merge = not forced
+                    finite = False
                 prev_end = offset + len(token.text)
-                before = (before[1], token.text)
+                recent = [*recent[-7:], token]
+                finite = finite or token.tag_ in _FINITE_VERB
             add(doc[start : sent.end], may_merge)
         return spans
 
     @staticmethod
-    def _cited_end(before: tuple[str, str], gap: str) -> bool:
-        """Whether a citation or reminder in brackets ends the sentence there.
+    def _cited_end(recent: list[Any], gap: str, clause: bool) -> bool:
+        """Whether a bracketed citation or reminder ends the sentence there.
 
-        before holds the last two non-space tokens' text and gap the space
-        after them; the next word is capitalised. That is the case after
-        "...instead [citation]." and after a reminder ending its line with no
-        full stop ("...accidents\n[citation needed]\nExperts agree..."). Not
-        after a citation ending its line ("As reported in [12]\nSmith et
-        al. showed"), where the next word is often a name.
+        recent holds the last few non-space tokens, gap the space after them
+        and clause whether the sentence so far has a finite verb; the next word
+        is capitalised. That is the case after "...instead [citation]." and
+        when a reminder, or a citation closing a clause, ends its line without
+        a full stop ("...varies between patients [12]\nMost patients...").
+        Not after an introductory phrase ("In a large cohort study [3]\nWalker
+        and colleagues found...") or a preposition ("As reported in [12]").
         """
-        if before[0] in _CITATION_CLOSE and before[1] in (".", "!", "?"):
+        if len(recent) >= 2 and recent[-2].text in _CITATION_CLOSE and recent[-1].text in ".!?":
             return True
-        reminder_end = before[0].lower() in ("citation", "needed") and before[1] == "]"
-        return reminder_end and "\n" in gap
+        found = NLPPipeline._line_end_citation(recent, gap)
+        if found is None:
+            return False
+        cited, word = found
+        if _REMINDER.fullmatch(cited):
+            return True
+        return (
+            clause
+            and bool(_CITATION_FULL.fullmatch(cited))
+            and not (
+                word is not None
+                and (
+                    word.lower_ in _PREPOSITIONS
+                    or word.pos_ in ("ADP", "SCONJ")
+                    or word.tag_ in ("TO", "VBG", "VBN")
+                )
+            )
+        )
+
+    @staticmethod
+    def _line_end_citation(recent: list[Any], gap: str) -> tuple[str, Any] | None:
+        """The bracketed text ending recent at a line break, and the word before it.
+
+        The word is None at the start, or when glued to the bracket ("by~[12]"
+        is checked against _PREPOSITIONS here and reported as no word).
+        """
+        if "\n" not in gap or not recent or recent[-1].text not in _CITATION_CLOSE:
+            return None
+        opening = "[" if recent[-1].text == "]" else CITATION_PLACEHOLDER[0]
+        i = next((i for i in range(len(recent) - 1, -1, -1) if opening in recent[i].text), None)
+        if i is None:
+            return None
+        cited = "".join(t.text_with_ws for t in recent[i:]).strip()
+        cited = cited[cited.rindex(opening) :]
+        glued = recent[i].text[: recent[i].text.rindex(opening)].rstrip("~")
+        if glued:
+            return ("" if glued.lower() in _PREPOSITIONS else cited), None
+        return cited, recent[i - 1] if i else None
 
     @staticmethod
     def _continues_with_citation(prev: Any, span: Any) -> bool:
@@ -395,12 +473,18 @@ class NLPPipeline:
             after = doc[start].idx + leading.end()
             following = next((t for t in doc[start : span.end] if t.idx >= after), None)
             if following is not None and following.tag_ in _FINITE_VERB:
-                # Not "Although X is unclear, many researchers" or "Researchers
-                # studying X": only a finite verb after the last comma counts
+                # Not "Researchers studying X" (no finite verb), nor "Although X
+                # is unclear, many researchers" (only before the comma)
                 before = list(doc[max(prev.start, end - 50) : end])
-                commas = [i for i, t in enumerate(before) if t.text == ","]
-                clause = before[commas[-1] + 1 :] if commas else before
-                return not any(t.tag_ in _FINITE_VERB for t in clause)
+                first = next((t for t in doc[prev.start : end] if not t.is_space), None)
+                if first is not None and first.lower_ in _SUBORDINATORS:
+                    depth, last_comma = 0, -1
+                    for k, t in enumerate(before):
+                        depth += (t.text in "([") - (t.text in ")]")
+                        if t.text == "," and depth <= 0:
+                            last_comma = k
+                    before = before[last_comma + 1 :]
+                return not any(t.tag_ in _FINITE_VERB for t in before)
         return True
 
     @staticmethod

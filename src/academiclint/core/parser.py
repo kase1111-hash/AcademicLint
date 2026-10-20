@@ -5,6 +5,8 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from academiclint.utils.patterns import CITATION_PATTERNS
+
 # What citation commands such as \\cite{...} become; detectors treat it as a
 # citation. Its brackets (U+27E6/U+27E7) keep a "[citation]" typed in a draft as
 # a reminder from counting as one, and the parsers don't split them off.
@@ -179,8 +181,8 @@ def _item(match: re.Match[str]) -> str:
 
 
 # The end of a sentence or lead-in: punctuation, then closing quotes or
-# brackets or a footnote reference ('failure."', "documented.[^1]")
-_LINE_END = re.compile(r"[.:!?][\"'\u201d\u2019)\]]*(?:\[\^[^\]]*\])?$")
+# brackets or a citation or footnote reference ('failure."', "agrees.[12]")
+_LINE_END = re.compile(r"[.:!?][\"'\u201d\u2019)\]]*(?:\[[^\]]*\])?$")
 
 
 _BULLET = re.compile(r"[ \t]*[-*+][ \t]+")
@@ -206,19 +208,24 @@ def _mark_list_items(text: str) -> str:
         if match:
             lines[i] = _item(match) + line[match.end() :]
             indents.add(indent)
-        elif line.strip() and not indent and prev_blank:
-            indents = set()  # A paragraph after the list, not an item's wrapped line
+        elif (line.strip() and not indent and prev_blank) or _HEADING_END in line:
+            indents = set()  # A paragraph or heading after the list, not a wrapped line
         prev_blank = not line.strip()
     return "\n".join(lines)
 
 
 # A setext heading's underline
 _SETEXT = re.compile(r"=+|-+")
-# Where a sentence ends inside a line, closing quotes or a citation included
-_CLAUSE_START = re.compile(r"[.!?:][\"'\u201d\u2019)\]]*(?:\[[^\]]*\])?\s")
+# Where a sentence ends inside a line (not "et al." or "e.g."), closing
+# quotes or a citation included
+_CLAUSE_START = re.compile(
+    r"(?<!\bal)(?<!\be\.g)(?<!\bi\.e)(?<!\bcf)(?<!\bvs)"
+    r"[.!?:][\"'\u201d\u2019)\]]*(?:\[[^\]]*\])?\s"
+)
+_CITATIONS = re.compile("|".join(f"(?:{pattern})" for pattern in CITATION_PATTERNS))
 # Words a lead-in clause can end with however short it is ("Research suggests that")
 _LEAD_IN_END = re.compile(
-    r"that|as|by|of|to|for|from|with|in|on|at|includ(?:e|es|ing)|are|is|were|was|be|such"
+    r"that|as|by|of|to|for|from|with|in|on|at|includ(?:e|es|ed|ing)|are|is|were|was|be|such"
     r"|like|whether|because|when|where",
     re.IGNORECASE,
 )
@@ -240,10 +247,14 @@ def _continues(block: list[str], in_list: bool) -> bool:
         return True
     if in_list or not words or _LINE_END.search(prev) or _SETEXT.fullmatch(prev.strip()):
         return False
-    # The clause since the last sentence end ("...weeks. Lee [4] observed"),
-    # or the whole line if longer: "et al. " is not a sentence end
-    clause = _CLAUSE_START.split(" ".join(block))[-1].split()
-    return max(len(clause), len(words)) >= 4 or bool(_LEAD_IN_END.fullmatch(clause[-1]))
+    # The clause since the last sentence end ("...weeks. Lee [4] observed")
+    clause = _CLAUSE_START.split(" ".join(block).rstrip())[-1]
+    words = clause.split()
+    if not words:
+        return False
+    # A label has no citation; a lead-in such as "Lee (2021) found" may be short
+    cited = bool(_CITATIONS.search(clause)) and bool(_CITATIONS.sub("", clause).split())
+    return len(words) >= 4 or cited or bool(_LEAD_IN_END.fullmatch(words[-1]))
 
 
 def _finish(text: str) -> ParsedText:
@@ -434,6 +445,10 @@ def latex_to_text(content: str) -> ParsedText:
     # cites rather than joining it to the next one. \\citet and \\textcite are
     # part of their sentence ("\\citet{x} showed..."), so they stand alone.
     args = r"\*?(?:\[[^\]]*\])*\{[^}]+\}"
+    # "by~\\cite{x}": the tie is a space before the citation
+    text = re.sub(
+        r"(?<!\\)~(?=\\(?:cite|citep|citet|parencite|textcite|autocite|footcite)\b)", " ", text
+    )
     note = rf"\\(?:cite|citep|parencite|autocite|footcite){args}"
     text = _sub_keep_lines(rf"([.!?])?{note}(?:[ \t]*{note})*", _citation, text, inline=True)
     text = _sub_keep_lines(rf"\\(?:citet|textcite){args}", CITATION_PLACEHOLDER, text, inline=True)

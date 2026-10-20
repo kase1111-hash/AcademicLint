@@ -109,6 +109,9 @@ class TestSourceLines:
             "**Strengths**",
             "Results\n=======",
             "Key findings of the review\n==========",
+            "Step 1: Data collection",
+            "Grades were lower. [12]",
+            "Prior work agrees.[12]  ",
             "This is well documented.[^1]",
             'Some called it "a failure."',
         ],
@@ -152,6 +155,13 @@ class TestSourceLines:
         assert "2." not in parsed.text
         assert len(lazy.sentence_starts) == 2
         assert "2019. Most parents agreed." in year.text
+
+    def test_heading_closes_a_list(self):
+        parsed = markdown_to_text(
+            "1. A\n2. B\n\n## Methods\nRecruited in the autumn of\n2019. Each took part.\n"
+        )
+
+        assert "2019. Each took part." in parsed.text
 
     def test_year_starting_a_wrapped_line_is_not_a_list(self):
         """As in CommonMark, only "1." can start a list inside a paragraph."""

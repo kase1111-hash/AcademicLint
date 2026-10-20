@@ -195,12 +195,18 @@ class TestCitationSplitOff:
                 token.pos_, token.tag_ = tags[token.text]
         return doc
 
-    def test_citation_leading_a_clause_on_the_next_line(self):
+    @pytest.mark.parametrize(
+        "line",
+        ["Most students procrastinate weekly", "Most agree that it causes stress, and low mood"],
+    )
+    def test_citation_leading_a_clause_on_the_next_line(self, line):
         """In an outline, "[3] reported..." on its own line starts a new statement."""
         doc = self.tagged(
-            "Most students procrastinate weekly",
+            line,
             "[3] reported that it helps.",
             procrastinate=("VERB", "VBP"),
+            agree=("VERB", "VBP"),
+            causes=("VERB", "VBZ"),
             reported=("VERB", "VBD"),
         )
 
@@ -242,9 +248,16 @@ class TestCitationSplitOff:
         line_end = presplit("Studies show that naps help\n[citation needed]\nExperts agree [12].")
 
         assert self.sentences(doc) == ["Naps help [citation needed].", "Mednick (2003) found more."]
-        # Not after a citation: the next word is often a name
-        cited = presplit("As reported in [12]\nSmith et al. showed that most recovered.")
-        assert len(self.sentences(cited)) == 1
+        # After a citation ending a clause's line too, not a phrase's
+        cited = self.tagged("Recovery varies between patients [12]\nMost patients recovered.")
+        next(t for t in cited if t.text == "varies").tag_ = "VBZ"
+        glued = presplit("Deaths fell after the law passed[citation]\nExperts agree [12].")
+        object_of = presplit("As reported in [12]\nSmith et al. showed that most recovered.")
+        phrase = presplit("In a large cohort study [3]\nWalker and colleagues found more.")
+        assert len(self.sentences(cited)) == 2
+        assert len(self.sentences(glued)) == 2
+        assert len(self.sentences(object_of)) == 1
+        assert len(self.sentences(phrase)) == 1
         assert self.sentences(line_end) == [
             "Studies show that naps help\n[citation needed]",
             "Experts agree [12].",
