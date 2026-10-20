@@ -223,6 +223,11 @@ _CLAUSE_START = re.compile(
     r"[.!?:][\"'\u201d\u2019)\]]*(?:\[[^\]]*\])?\s"
 )
 _CITATIONS = re.compile("|".join(f"(?:{pattern})" for pattern in CITATION_PATTERNS))
+# Verbs a short lead-in after a sentence on the same line can end with
+_REPORTING = re.compile(
+    r"[a-z]+ed|shows?|suggests?|finds?|found|indicates?|reports?|argues?|agrees?|notes?"
+    r"|demonstrates?|reveals?|claims?|states?|observes?|concludes?|confirms?|shown"
+)
 # Words a lead-in clause can end with however short it is ("Research suggests that")
 _LEAD_IN_END = re.compile(
     r"that|as|by|of|to|for|from|with|in|on|at|includ(?:e|es|ed|ing)|are|is|were|was|be|such"
@@ -248,13 +253,26 @@ def _continues(block: list[str], in_list: bool) -> bool:
     if in_list or not words or _LINE_END.search(prev) or _SETEXT.fullmatch(prev.strip()):
         return False
     # The clause since the last sentence end ("...weeks. Lee [4] observed")
-    clause = _CLAUSE_START.split(" ".join(block).rstrip())[-1]
+    joined = " ".join(block).rstrip()
+    cut = next(reversed(list(_CLAUSE_START.finditer(joined))), None)
+    clause = joined[cut.end() :] if cut else joined
     words = clause.split()
     if not words:
         return False
-    # A label has no citation; a lead-in such as "Lee (2021) found" may be short
+    # A label has no citation; a lead-in such as "Lee (2021) found" may be short.
+    # So may one ending in a reporting verb after a sentence on its line
+    # ("...in adolescence. Studies show"), unlike a caption ("Table 2. Sample
+    # characteristics") or a label on a line of its own
     cited = bool(_CITATIONS.search(clause)) and bool(_CITATIONS.sub("", clause).split())
-    return len(words) >= 4 or cited or bool(_LEAD_IN_END.fullmatch(words[-1]))
+    same_line = (
+        cut is not None and cut.group(0)[0] in ".!?" and cut.start() >= len(joined) - len(prev)
+    )
+    return (
+        len(words) >= 4
+        or cited
+        or bool(_LEAD_IN_END.fullmatch(words[-1]))
+        or (same_line and len(words) >= 2 and bool(_REPORTING.fullmatch(words[-1])))
+    )
 
 
 def _finish(text: str) -> ParsedText:
@@ -445,10 +463,11 @@ def latex_to_text(content: str) -> ParsedText:
     # cites rather than joining it to the next one. \\citet and \\textcite are
     # part of their sentence ("\\citet{x} showed..."), so they stand alone.
     args = r"\*?(?:\[[^\]]*\])*\{[^}]+\}"
-    # "by~\\cite{x}": the tie is a space before the citation
-    text = re.sub(
-        r"(?<!\\)~(?=\\(?:cite|citep|citet|parencite|textcite|autocite|footcite)\b)", " ", text
-    )
+    # "by~\\cite{x}": the tie is a space before the citation. After the full
+    # stop (".~\\cite{x}") it goes, so the citation moves before the stop
+    cite_command = r"\\(?:cite|citep|citet|parencite|textcite|autocite|footcite)\b"
+    text = re.sub(rf"(?<=[.!?])~(?={cite_command})", "", text)
+    text = re.sub(rf"(?<!\\)~(?={cite_command})", " ", text)
     note = rf"\\(?:cite|citep|parencite|autocite|footcite){args}"
     text = _sub_keep_lines(rf"([.!?])?{note}(?:[ \t]*{note})*", _citation, text, inline=True)
     text = _sub_keep_lines(rf"\\(?:citet|textcite){args}", CITATION_PLACEHOLDER, text, inline=True)

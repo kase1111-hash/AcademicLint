@@ -146,19 +146,11 @@ _PREPOSITIONS = frozenset(
 # Words opening a subordinate clause: in "Although X is unclear, many
 # researchers\n[12] argue...", the verb before the comma is not the line's own
 _SUBORDINATORS = frozenset(
-    {
-        "although",
-        "though",
-        "while",
-        "whereas",
-        "because",
-        "since",
-        "if",
-        "unless",
-        "when",
-        "despite",
-    }
+    {"although", "though", "even", "while", "whereas", "because", "since", "if", "unless"}
+    | {"when", "despite", "as", "after", "before", "once", "given", "until", "whether"}
 )
+# Words after a comma that start a new clause of the sentence ("..., and many researchers")
+_CONJUNCTIONS = frozenset({"and", "but", "yet", "so", "or", "nor", "whereas", "while"})
 
 
 class NLPPipeline:
@@ -344,6 +336,10 @@ class NLPPipeline:
         next_start = 0
         recent: list[Any] = []  # The last few non-space tokens
         finite = False  # Whether the span so far has a finite verb (is a clause)
+        # Whether the span opens with a preposition or subordinator ("In a study
+        # that followed...", "When the trial was stopped...") and has had no comma
+        # since: an introductory clause, still waiting for its main clause
+        introductory = False
 
         def add(span: Any, may_merge: bool) -> None:
             if may_merge and spans and NLPPipeline._continues_with_citation(spans[-1], span):
@@ -367,23 +363,37 @@ class NLPPipeline:
                 if prev_end is None:
                     may_merge = not forced
                     finite = False
+                    introductory = NLPPipeline._opens_clause(token)
                 elif (
                     forced
                     or "\n\n" in sent_text[prev_end:offset]
                     or (
                         token.text[:1].isupper()
-                        and NLPPipeline._cited_end(recent, sent_text[prev_end:offset], finite)
+                        and NLPPipeline._cited_end(
+                            recent, sent_text[prev_end:offset], finite and not introductory
+                        )
                     )
                 ):
                     add(doc[start : token.i], may_merge)
                     start = token.i
                     may_merge = not forced
                     finite = False
+                    introductory = NLPPipeline._opens_clause(token)
                 prev_end = offset + len(token.text)
                 recent = [*recent[-7:], token]
                 finite = finite or token.tag_ in _FINITE_VERB
+                introductory = introductory and token.text != ","
             add(doc[start : sent.end], may_merge)
         return spans
+
+    @staticmethod
+    def _opens_clause(token: Any) -> bool:
+        """Whether token opens an introductory phrase or clause ("In", "When")."""
+        return (
+            token.lower_ in _PREPOSITIONS
+            or token.lower_ in _SUBORDINATORS
+            or token.pos_ in ("ADP", "SCONJ")
+        )
 
     @staticmethod
     def _cited_end(recent: list[Any], gap: str, clause: bool) -> bool:
@@ -475,15 +485,18 @@ class NLPPipeline:
             if following is not None and following.tag_ in _FINITE_VERB:
                 # Not "Researchers studying X" (no finite verb), nor "Although X
                 # is unclear, many researchers" (only before the comma)
+                # nor "X is common, and many researchers" (only before ", and")
                 before = list(doc[max(prev.start, end - 50) : end])
                 first = next((t for t in doc[prev.start : end] if not t.is_space), None)
-                if first is not None and first.lower_ in _SUBORDINATORS:
-                    depth, last_comma = 0, -1
-                    for k, t in enumerate(before):
-                        depth += (t.text in "([") - (t.text in ")]")
-                        if t.text == "," and depth <= 0:
-                            last_comma = k
-                    before = before[last_comma + 1 :]
+                depth, last_comma, last_conjunction = 0, -1, -1
+                for k, t in enumerate(before):
+                    depth += (t.text in "([") - (t.text in ")]")
+                    if t.text == "," and depth <= 0:
+                        last_comma = k
+                        if k + 1 < len(before) and before[k + 1].lower_ in _CONJUNCTIONS:
+                            last_conjunction = k
+                subordinate = first is not None and first.lower_ in _SUBORDINATORS
+                before = before[(last_comma if subordinate else last_conjunction) + 1 :]
                 return not any(t.tag_ in _FINITE_VERB for t in before)
         return True
 

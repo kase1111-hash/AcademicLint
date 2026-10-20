@@ -197,7 +197,10 @@ class TestCitationSplitOff:
 
     @pytest.mark.parametrize(
         "line",
-        ["Most students procrastinate weekly", "Most agree that it causes stress, and low mood"],
+        [
+            "Most students procrastinate weekly",
+            "Most agree that it causes stress, anxiety and low mood",
+        ],
     )
     def test_citation_leading_a_clause_on_the_next_line(self, line):
         """In an outline, "[3] reported..." on its own line starts a new statement."""
@@ -228,6 +231,11 @@ class TestCitationSplitOff:
                 "[12] argue that it matters.",
                 {"is": ("AUX", "VBZ"), "argue": ("VERB", "VBP")},
             ),
+            (
+                "Sleep loss is common among students, and many researchers",
+                "[12] argue that it matters.",
+                {"is": ("AUX", "VBZ"), "argue": ("VERB", "VBP")},
+            ),
         ],
     )
     def test_citation_carrying_on_the_line_before(self, claim, rest, tags):
@@ -254,10 +262,13 @@ class TestCitationSplitOff:
         glued = presplit("Deaths fell after the law passed[citation]\nExperts agree [12].")
         object_of = presplit("As reported in [12]\nSmith et al. showed that most recovered.")
         phrase = presplit("In a large cohort study [3]\nWalker and colleagues found more.")
+        clause = self.tagged("When the trial was stopped early [4]\nFDA reviewers noted more.")
+        next(t for t in clause if t.text == "was").tag_ = "VBD"
         assert len(self.sentences(cited)) == 2
         assert len(self.sentences(glued)) == 2
         assert len(self.sentences(object_of)) == 1
         assert len(self.sentences(phrase)) == 1
+        assert len(self.sentences(clause)) == 1
         assert self.sentences(line_end) == [
             "Studies show that naps help\n[citation needed]",
             "Experts agree [12].",

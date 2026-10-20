@@ -110,6 +110,8 @@ class TestSourceLines:
             "Results\n=======",
             "Key findings of the review\n==========",
             "Step 1: Data collection",
+            "**Table 2.** Sample characteristics",
+            "Three measures were used. Primary outcome measures",
             "Grades were lower. [12]",
             "Prior work agrees.[12]  ",
             "This is well documented.[^1]",
@@ -136,6 +138,11 @@ class TestSourceLines:
             # A lead-in after a sentence on the same line, or after "et al."
             ("Sleep was tracked for two weeks. Lee [4] observed\n- that 40% slept less\n", 0),
             ("In a cohort of 2,000 adolescents,\nHale et al. [7] found\n- a 30% rise\n", 0),
+            # A short one after a sentence on the same line
+            (
+                "It is common in adolescence. Studies show\n- shorter sleep [3],\n- later bedtimes [5].\n",
+                0,
+            ),
         ],
     )
     def test_list_after_lead_in_clause(self, source, starts):
@@ -304,12 +311,14 @@ class TestStructure:
         parsed = parse_latex("It was a failure.\\footcite{smith1990}\nResearch shows more.")
         run = parse_latex("It was a failure.\\cite{a}\\cite{b} Research shows more.")
         subject = parse_latex("It lasts.\\cite{a}\n\\citet{b} showed that it causes harm.")
+        tied = parse_latex("It held on school nights.~\\cite{a}\nStudies show more.")
 
         assert parsed == f"It was a failure {CITATION_PLACEHOLDER}.\nResearch shows more."
         assert run == f"It was a failure {CITATION_PLACEHOLDER}. Research shows more."
         assert subject == (
             f"It lasts {CITATION_PLACEHOLDER}.\n{CITATION_PLACEHOLDER} showed that it causes harm."
         )
+        assert tied == f"It held on school nights {CITATION_PLACEHOLDER}.\nStudies show more."
 
     def test_heading_title_with_nested_commands(self):
         parsed = parse_latex(
