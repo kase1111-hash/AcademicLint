@@ -1,5 +1,6 @@
 """Main Linter class for AcademicLint."""
 
+import dataclasses
 import logging
 import time
 import uuid
@@ -8,9 +9,12 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import yaml
+
 from academiclint.core.config import Config
 from academiclint.core.exceptions import (
     AcademicLintError,
+    ConfigurationError,
     ParsingError,
     ValidationError,
 )
@@ -112,6 +116,7 @@ class Linter:
             "Configuration: level=%s, min_density=%.2f", self.config.level, self.config.min_density
         )
 
+        detector_config = self._detector_config()
         nlp = self._ensure_pipeline()
         detectors = self._ensure_detectors()
 
@@ -130,7 +135,7 @@ class Linter:
         all_flags = []
         for detector in detectors:
             try:
-                flags = detector.detect(doc, self.config)
+                flags = detector.detect(doc, detector_config)
                 all_flags.extend(flags)
             except AcademicLintError:
                 # Re-raise our own exceptions
@@ -319,6 +324,39 @@ class Linter:
                 raise
 
         return results
+
+    def _detector_config(self) -> Config:
+        """Return the config with the domain vocabulary merged into domain_terms.
+
+        A copy is returned so the caller's Config is never mutated.
+
+        Raises:
+            ConfigurationError: If the domain or domain file cannot be loaded
+        """
+        config = self.config
+        if config.domain is None and config.domain_file is None:
+            return config
+
+        from academiclint.domains.manager import DomainManager
+
+        manager = DomainManager()
+        terms = list(config.domain_terms)
+        try:
+            if config.domain is not None:
+                is_builtin = config.domain in manager.BUILTIN_DOMAINS
+                if not is_builtin and not Path(config.domain).is_file():
+                    raise ConfigurationError(
+                        f"Unknown domain '{config.domain}'. Built-in domains: "
+                        f"{', '.join(sorted(manager.BUILTIN_DOMAINS))}"
+                    )
+                terms.extend(manager.get_terms(config.domain))
+            if config.domain_file is not None:
+                # get_terms also includes the terms of the file's `parent` domain
+                terms.extend(manager.get_terms(str(config.domain_file)))
+        except (OSError, ValueError, yaml.YAMLError) as e:
+            raise ConfigurationError(f"Failed to load domain vocabulary: {e}") from e
+
+        return dataclasses.replace(config, domain_terms=terms)
 
     def _get_density_grade(self, density: float) -> str:
         """Convert density score to grade label."""

@@ -6,29 +6,42 @@ from academiclint.core.result import AnalysisResult, Severity
 from academiclint.formatters.base import Formatter
 
 
+def _escape_data(value: str) -> str:
+    """Escape a workflow command message; a raw newline would end the command."""
+    return value.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+
+
+def _escape_property(value: str) -> str:
+    """Escape a workflow command property value such as a file path."""
+    return _escape_data(value).replace(":", "%3A").replace(",", "%2C")
+
+
 class GitHubFormatter(Formatter):
     """Formatter for GitHub Actions workflow commands."""
 
-    def __init__(self, **kwargs):
-        pass
+    def __init__(self, min_density: float = 0.5, **kwargs):
+        self.min_density = min_density
 
     def format(self, result: AnalysisResult, file_path: str = "input") -> str:
         """Format analysis result as GitHub Actions commands."""
         lines = []
+        file_prop = _escape_property(file_path)
 
         for flag in result.flags:
             level = self._severity_to_level(flag.severity)
-            message = f'{flag.type.value}: "{flag.term}" - {flag.suggestion}'
+            term = " ".join(flag.term.split())
+            message = _escape_data(f'{flag.type.value}: "{term}" - {flag.suggestion}')
 
             # GitHub Actions workflow command format
             lines.append(
-                f"::{level} file={file_path},line={flag.line},col={flag.column}::{message}"
+                f"::{level} file={file_prop},line={flag.line},col={flag.column}::{message}"
             )
 
         # Add error if density is below threshold
-        if result.summary.density < 0.5:  # Default threshold
+        if result.summary.density < self.min_density:
             lines.append(
-                f"::error file={file_path}::Density {result.density:.2f} is below threshold 0.50"
+                f"::error file={file_prop}::Density {result.density:.2f} "
+                f"is below threshold {self.min_density:.2f}"
             )
 
         return "\n".join(lines)

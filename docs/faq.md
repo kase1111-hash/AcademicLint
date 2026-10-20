@@ -281,7 +281,7 @@ Create a YAML file:
 ```yaml
 # my-domain.yml
 name: "Cognitive Science"
-parent: psychology  # Inherit from built-in
+parent: philosophy  # Inherit from built-in
 
 technical_terms:
   - affordance
@@ -306,7 +306,7 @@ Not directly, but you can create a custom domain that inherits from one and adds
 
 ```yaml
 name: "Interdisciplinary"
-parent: psychology
+parent: philosophy
 
 technical_terms:
   # Philosophy terms

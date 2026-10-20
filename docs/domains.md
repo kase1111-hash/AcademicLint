@@ -8,25 +8,16 @@ Different academic fields have different vocabularies. AcademicLint supports dom
 # Use a preset domain
 academiclint check paper.md --domain philosophy
 academiclint check paper.md --domain computer-science
-academiclint check paper.md --domain medicine
-academiclint check paper.md --domain law
-academiclint check paper.md --domain history
 ```
 
 Available built-in domains:
 
 | Domain | Description | Term Count |
 |--------|-------------|------------|
-| philosophy | Philosophical terminology | ~50 |
-| computer-science | CS and programming terms | ~80 |
-| medicine | Medical and clinical terms | ~100 |
-| law | Legal terminology | ~60 |
-| history | Historical terms | ~40 |
-| psychology | Psychological terminology | ~70 |
-| economics | Economic concepts | ~50 |
-| physics | Physics terminology | ~60 |
-| biology | Biological terms | ~80 |
-| sociology | Sociological concepts | ~50 |
+| philosophy | Philosophical terminology and concepts | 51 |
+| computer-science | Computer science and programming terminology | 60 |
+
+For other fields, use a custom domain file (below).
 
 ## Custom Domain File
 
@@ -36,7 +27,7 @@ Create a custom domain YAML file:
 # my-domain.yml
 name: "Cognitive Science"
 description: "Interdisciplinary study of mind and cognition"
-parent: psychology  # Inherit from built-in domain
+parent: philosophy  # Inherit terms from a built-in domain
 
 # Terms that are precise in this field (won't be flagged as jargon)
 technical_terms:
@@ -93,7 +84,7 @@ medicine
     └── cognitive-science (custom)
 ```
 
-When using `parent: psychology`, your domain inherits all terms from the psychology domain.
+When using `parent: philosophy`, your domain inherits all terms from the philosophy domain.
 
 ## Inline Domain Terms
 

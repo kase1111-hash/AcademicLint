@@ -16,13 +16,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Troubleshooting guide
 
 ### Changed
-- (none)
+- Without an explicit model, the NLP pipeline falls back from `en_core_web_lg`
+  to `en_core_web_md` or `en_core_web_sm`, whichever is installed
+- `check` accepts directories (searched recursively for supported files)
+- Command-line options override `--config` values only when given; the config
+  file's `output.format`, `output.color` and `fail_under` are now honoured
+- Expected errors (bad input, bad config, missing model) print a one-line
+  message and exit with code 1 instead of a traceback
+- `--sections` prints a warning that it is not supported yet
 
 ### Fixed
-- (none)
+- Text with leading whitespace lost its first sentence: 0 words and density 0.0
+  for the first paragraph, and anchored patterns never matched it
+- Sentences ran across blank lines (e.g. a Markdown heading into body text),
+  giving the body paragraph 0 words and density 0.0
+- Flags starting in leading whitespace were dropped from `result.flags`
+- Causal and weasel patterns matched across paragraphs (a "Results" heading
+  followed by "In ..." was flagged as "results in")
+- Circular definitions wrapped onto a second line were missed, an article was
+  stripped from the start of a word ("an" from "anarchic"), and one sentence
+  could be flagged twice
+- Whitespace-only input is rejected with `ValidationError`
+- `--domain` and `--domain-file` were ignored; unknown domains are now an error
+- `--quiet` had no effect; `check -` (stdin) was rejected
+- GitHub output broke on newlines in messages and ignored `--min-density`
+- `setup` ran `python -m spacy download`, which could use a different
+  interpreter than academiclint; it now uses the running interpreter
+- Reading stdin used `click.get_text_stream`, removed in Click 9
 
 ### Removed
-- (none)
+- `safety` dev dependency (unused; `pip-audit` covers dependency scanning)
 
 ---
 

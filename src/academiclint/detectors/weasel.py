@@ -26,7 +26,7 @@ class WeaselDetector(Detector):
             patterns.append(rf"\b{re.escape(weasel)}\b")
 
         for pattern in patterns:
-            for match in re.finditer(pattern, doc.text, re.IGNORECASE):
+            for match in self.finditer_in_paragraphs(pattern, doc.text, re.IGNORECASE):
                 start = match.start()
                 end = match.end()
 

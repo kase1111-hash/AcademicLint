@@ -2,6 +2,7 @@
 
 import re
 from abc import ABC, abstractmethod
+from collections.abc import Iterator
 
 from academiclint.core.config import Config
 from academiclint.core.pipeline import ProcessedDocument
@@ -34,6 +35,23 @@ class Detector(ABC):
     # =========================================================================
     # Shared helper methods for all detectors (DRY principle)
     # =========================================================================
+
+    @staticmethod
+    def finditer_in_paragraphs(pattern: str, text: str, flags: int = 0) -> Iterator[re.Match[str]]:
+        """Like re.finditer, but a match never spans a paragraph break.
+
+        Multi-word patterns join words with \\s+, which would otherwise match
+        across a blank line, e.g. a "Results" heading followed by a paragraph
+        starting "In ..." reads as the causal phrase "results in".
+        """
+        compiled = re.compile(pattern, flags)
+        start = 0
+        while True:
+            brk = text.find("\n\n", start)
+            yield from compiled.finditer(text, start, len(text) if brk == -1 else brk)
+            if brk == -1:
+                return
+            start = brk + 2
 
     def get_line_column(self, text: str, position: int) -> tuple[int, int]:
         """Get line and column number for a character position.

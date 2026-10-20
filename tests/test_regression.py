@@ -16,7 +16,7 @@ import tempfile
 import pytest
 
 from academiclint import Config, Linter
-from academiclint.core.exceptions import ValidationError
+from academiclint.core.exceptions import ConfigurationError, ValidationError
 from academiclint.core.result import AnalysisResult, FlagType, Severity
 
 # =============================================================================
@@ -498,6 +498,47 @@ class TestPreviouslyFixedBugs:
 
         assert len(result.flags) == result.summary.flag_count
         assert any(f.type == FlagType.CITATION_NEEDED for f in result.flags)
+
+    def test_bug_pattern_matches_across_paragraphs(self):
+        """
+        Bug: Multi-word patterns joined by \\s+ matched across blank lines.
+        Original: A "Results" heading followed by "In a study..." was flagged
+        as the causal claim "results in".
+        Expected: Matches stay within a paragraph; line breaks inside one
+        paragraph are still matched.
+        """
+        heading = Linter().check("Results\n\nIn a study of 500 participants, scores rose.")
+        wrapped = Linter().check("The policy results\nin lower costs.")
+
+        assert not [f for f in heading.flags if f.type == FlagType.UNSUPPORTED_CAUSAL]
+        assert [f for f in wrapped.flags if f.type == FlagType.UNSUPPORTED_CAUSAL]
+
+    def test_bug_domain_vocabulary_ignored(self):
+        """
+        Bug: Config.domain / domain_file were accepted but never used.
+        Original: Domain terms were flagged as jargon regardless of --domain.
+        Expected: Terms from the domain vocabulary are not flagged as jargon,
+        and the caller's Config is left unchanged.
+        """
+        text = (
+            "Phenomenology and hermeneutics reject naive empiricism, rationalism and materialism."
+        )
+        config = Config(domain="philosophy")
+
+        plain = Linter().check(text)
+        with_domain = Linter(config).check(text)
+
+        assert [f for f in plain.flags if f.type == FlagType.JARGON_DENSE]
+        assert not [f for f in with_domain.flags if f.type == FlagType.JARGON_DENSE]
+        assert config.domain_terms == []
+
+    def test_bug_unknown_domain_silently_ignored(self):
+        """
+        Bug: An unknown domain name was accepted without any error.
+        Expected: ConfigurationError naming the built-in domains.
+        """
+        with pytest.raises(ConfigurationError, match="Unknown domain 'medicine'"):
+            Linter(Config(domain="medicine")).check("Some text to analyze.")
 
 
 # =============================================================================

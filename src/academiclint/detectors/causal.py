@@ -21,7 +21,7 @@ class CausalDetector(Detector):
         flags = []
 
         for pattern in CAUSAL_PATTERNS:
-            for match in re.finditer(pattern, doc.text, re.IGNORECASE):
+            for match in self.finditer_in_paragraphs(pattern, doc.text, re.IGNORECASE):
                 start = match.start()
                 end = match.end()
 

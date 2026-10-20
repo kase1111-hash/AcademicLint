@@ -522,17 +522,16 @@ Different fields have different vocabularies. A term that's jargon in one contex
 # Use a preset domain
 academiclint check paper.md --domain philosophy
 academiclint check paper.md --domain computer-science
-academiclint check paper.md --domain medicine
-academiclint check paper.md --domain law
-academiclint check paper.md --domain history
 ```
+
+Built-in domains: `philosophy` and `computer-science`. For other fields, use a custom domain file.
 
 ### Custom Domain File
 
 ```yaml
 # my-domain.yml
 name: "Cognitive Science"
-parent: psychology  # Inherit from built-in
+parent: philosophy  # Inherit from built-in
 
 # Terms that are precise in this field
 technical_terms:
