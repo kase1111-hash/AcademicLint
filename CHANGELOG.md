@@ -61,15 +61,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A Markdown heading ending in '#' lost it ("C#" became "C")
 - LaTeX citations were never recognised: `\cite{...}` became a placeholder no
   citation check matched, and `\citep`/`\parencite`/... were deleted, so every
-  cited claim was flagged as needing a citation
+  cited claim was flagged as needing a citation. Citations now become
+  `⟦citation⟧`, which a "[citation]" reminder typed in a draft can't be
+  mistaken for, and one placed after the punctuation (`claim.\footcite{...}`)
+  no longer joins its sentence to the next
 - With `en_core_web_lg`, a bracketed citation after a claim ("... impairs
   recall [12].") was split off into a sentence of its own, so the claim was
   still flagged as needing a citation
-- Words inside a citation ("[citation]", "(Richardson, 2017)") counted as
-  jargon
+- Words inside a citation ("(Richardson, 2017)", the LaTeX placeholder)
+  counted as jargon
+- List items without a full stop ran into one sentence, so a citation in one
+  item covered the claims in the others; each item now starts a sentence
 - A `<` in Markdown prose (e.g. "p < .001") was taken for an HTML tag and the
   text up to the next `>` was deleted; an escaped `\$` in LaTeX was taken for
-  math
+  math (a `\\` line break before `$` still opens it)
 - A multi-line `\cite`/`\ref`/`\label` split its sentence, and a LaTeX section
   title containing a command (`\emph{...}`) was cut short
 - Domain terms joined by an apostrophe, slash, en dash or LaTeX `--` did not

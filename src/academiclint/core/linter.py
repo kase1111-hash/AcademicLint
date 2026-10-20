@@ -5,6 +5,7 @@ import logging
 import time
 import uuid
 from bisect import bisect_right
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -105,8 +106,15 @@ class Linter:
             ProcessingError: If NLP processing fails
             DetectorError: If a detector fails (only in strict mode)
         """
+        return self._check(text)
+
+    def _check(self, text: str, sentence_starts: Sequence[int] = ()) -> AnalysisResult:
+        """Analyze text, starting a sentence at each of sentence_starts (see check)."""
         # Validate and sanitize input
-        text = validate_text(text)
+        checked = validate_text(text)
+        if len(checked) != len(text):
+            sentence_starts = ()  # Offsets into the unsanitized text
+        text = checked
 
         start_time = time.perf_counter()
         check_id = f"check_{uuid.uuid4().hex[:12]}"
@@ -123,7 +131,7 @@ class Linter:
 
         # Process document through NLP pipeline
         logger.debug("Processing document through NLP pipeline")
-        doc = nlp.process(text)
+        doc = nlp.process(text, sentence_starts)
         logger.debug(
             "NLP processing complete: %d tokens, %d sentences, %d paragraphs",
             len(doc.tokens),
@@ -298,7 +306,7 @@ class Linter:
                 file_path=str(validated_path),
             ) from e
 
-        result = self.check(parsed.text)
+        result = self._check(parsed.text, parsed.sentence_starts)
 
         # Report lines of the source file, not of the extracted text
         if parsed.source_lines is not None:

@@ -2,10 +2,12 @@
 
 import logging
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
 from academiclint.core.exceptions import ModelLoadError, ModelNotFoundError, ProcessingError
+from academiclint.core.parser import CITATION_PLACEHOLDER
 from academiclint.core.result import Span
 from academiclint.utils.patterns import CITATION_PATTERNS
 
@@ -108,8 +110,10 @@ _CITATION = "|".join(f"(?:{pattern})" for pattern in CITATION_PATTERNS)
 # A "sentence" holding nothing but citations, e.g. "[12]."
 _CITATION_ONLY = re.compile(rf"(?:\s*(?:{_CITATION}))+[\s.,;:!?]*")
 # A sentence opening with a bracketed citation, e.g. "[12], and others agree."
-_LEADING_CITATION = re.compile(rf"(?=[\[(])(?:{_CITATION})")
+_LEADING_CITATION = re.compile(rf"(?=[\[(\u27e6])(?:{_CITATION})")
 _SENTENCE_END = re.compile(r"[.!?][\"'\u201d\u2019)\]]*$")
+# The placeholder's closing bracket, which only the LaTeX parser writes
+_CITATION_CLOSE = CITATION_PLACEHOLDER[-1]
 
 
 class NLPPipeline:
@@ -171,11 +175,13 @@ class NLPPipeline:
         logger.error("spaCy model not found: %s", self.model_name)
         raise ModelNotFoundError(self.model_name)
 
-    def process(self, text: str) -> ProcessedDocument:
+    def process(self, text: str, sentence_starts: Sequence[int] = ()) -> ProcessedDocument:
         """Process text through NLP pipeline.
 
         Args:
             text: The text to process
+            sentence_starts: Offsets where a sentence starts whatever the
+                parser finds (e.g. list items, from ParsedText)
 
         Returns:
             ProcessedDocument with tokens, sentences, entities, etc.
@@ -213,7 +219,7 @@ class NLPPipeline:
             # Extract sentences, paired with their spaCy spans
             sentence_spans = [
                 (sentence, span)
-                for span in self._sentence_spans(doc)
+                for span in self._sentence_spans(doc, sentence_starts)
                 if (sentence := self._build_sentence(span)) is not None
             ]
             sentences = [sentence for sentence, _ in sentence_spans]
@@ -274,7 +280,7 @@ class NLPPipeline:
             raise ProcessingError("Failed to extract document features", original_error=e) from e
 
     @staticmethod
-    def _sentence_spans(doc: Any) -> list[Any]:
+    def _sentence_spans(doc: Any, starts: Sequence[int] = ()) -> list[Any]:
         """Return the doc's sentence spans, split wherever one crosses a blank line.
 
         The parser can run a sentence across a paragraph break (e.g. a Markdown
@@ -282,11 +288,18 @@ class NLPPipeline:
         parser's own boundaries inside each paragraph; presetting boundaries
         before the parser instead makes the small English model mis-split the
         body sentence ("Johnson (2019) found..." -> "Johnson", "(", ...).
+        A sentence is also split at each of `starts`, such as list items, which
+        the parser runs together when they have no full stop, and after a
+        LaTeX citation that ends a sentence ("...instead [citation].\nResearch
+        shows..."), which the large model can run into the next one.
         """
         spans: list[Any] = []
+        pending = sorted(starts)
+        next_start = 0
+        before = ("", "")  # The two previous non-space tokens' text
 
-        def add(span: Any) -> None:
-            if spans and NLPPipeline._continues_with_citation(spans[-1], span):
+        def add(span: Any, may_merge: bool) -> None:
+            if may_merge and spans and NLPPipeline._continues_with_citation(spans[-1], span):
                 spans[-1] = doc[spans[-1].start : span.end]
             else:
                 spans.append(span)
@@ -294,16 +307,30 @@ class NLPPipeline:
         for sent in doc.sents:
             sent_text = sent.text  # Span.text is rebuilt on every access
             start = sent.start
+            may_merge = True  # Whether the span from start may join the one before
             prev_end = None  # End of the previous non-space token, relative to sent
             for token in sent:
                 if token.is_space:
                     continue
+                forced = False
+                while next_start < len(pending) and pending[next_start] <= token.idx:
+                    forced = True
+                    next_start += 1
                 offset = token.idx - sent.start_char
-                if prev_end is not None and "\n\n" in sent_text[prev_end:offset]:
-                    add(doc[start : token.i])
+                cited_end = before[0] == _CITATION_CLOSE and before[1] in (".", "!", "?")
+                if prev_end is None:
+                    may_merge = not forced
+                elif (
+                    forced
+                    or (cited_end and token.text[:1].isupper())
+                    or "\n\n" in sent_text[prev_end:offset]
+                ):
+                    add(doc[start : token.i], may_merge)
                     start = token.i
+                    may_merge = not forced
                 prev_end = offset + len(token.text)
-            add(doc[start : sent.end])
+                before = (before[1], token.text)
+            add(doc[start : sent.end], may_merge)
         return spans
 
     @staticmethod
@@ -324,13 +351,17 @@ class NLPPipeline:
         if end == prev.start or start == span.end:
             return False
         # Only the tokens at the boundary are read: prev grows with each merge
-        if "\n\n" in doc[end - 1].whitespace_ + doc[end:start].text_with_ws:
+        gap = doc[end - 1].whitespace_ + doc[end:start].text_with_ws
+        if "\n\n" in gap:
             return False
         text = doc[start : span.end].text
         if _CITATION_ONLY.fullmatch(text):
             return True
-        prev_tail = doc[max(prev.start, end - 4) : end].text
-        return bool(_LEADING_CITATION.match(text)) and not _SENTENCE_END.search(prev_tail)
+        # A citation opening a new line starts a list item ("- [4] found..."),
+        # not the rest of the sentence before it
+        if "\n" in gap or not _LEADING_CITATION.match(text):
+            return False
+        return not _SENTENCE_END.search(doc[max(prev.start, end - 4) : end].text)
 
     @staticmethod
     def _build_sentence(sent: Any) -> Sentence | None:

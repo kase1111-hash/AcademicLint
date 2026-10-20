@@ -1,6 +1,7 @@
 """Tests for Markdown and LaTeX text extraction."""
 
 from academiclint.core.parser import (
+    CITATION_PLACEHOLDER,
     latex_to_text,
     markdown_to_text,
     parse_file,
@@ -75,6 +76,21 @@ class TestSourceLines:
         weasel = [f for f in result.flags if f.type == FlagType.WEASEL]
         assert [f.line for f in weasel] == [7]
 
+    def test_list_items_start_sentences(self):
+        """Each list item's start is recorded, without moving its text."""
+        markdown = markdown_to_text("Two groups:\n- first item\n  wrapped\n1. second item\n")
+        latex = latex_to_text(
+            "Two groups:\n\\begin{itemize}\n  \\item first item\n\\item second item\n"
+        )
+
+        for parsed in (markdown, latex):
+            starts = parsed.sentence_starts
+            assert [parsed.text[i:].split("\n")[0].strip() for i in starts] == [
+                "first item",
+                "second item",
+            ]
+        assert markdown.text.splitlines()[1].index("first") == 2
+
     def test_markdown_line_markers_keep_columns(self):
         parsed = parse_markdown("- many experts\n> some scholars\n## Heading here\n")
 
@@ -126,11 +142,19 @@ class TestStructure:
 
         assert "\n\n" not in parsed
 
-    def test_blank_line_inside_removed_construct_kept(self):
-        """A real paragraph break inside a removed construct stays a break."""
+    def test_dollars_across_paragraph_break_are_not_math(self):
+        """Math can't hold a blank line, so the paragraph break stays."""
         parsed = parse_latex("Next para with $x\n\ny$ math.")
 
         assert "\n\n" in parsed
+
+    def test_footnote_of_two_paragraphs_keeps_sentence_whole(self):
+        parsed = parse_latex(
+            "Sleep loss causes deficits\\footnote{Measured with n-back.\n\n"
+            "Two studies differ.} in adolescents (Walker, 2017)."
+        )
+
+        assert "\n\n" not in parsed
 
     def test_less_than_sign_is_not_an_html_tag(self):
         """'p < .001' must not swallow text up to the next '>' (a quote marker)."""
@@ -144,6 +168,32 @@ class TestStructure:
 
     def test_escaped_dollars_are_not_math(self):
         assert parse_latex("It costs \\$5 and then \\$10.") == "It costs \\$5 and then \\$10."
+
+    def test_line_break_before_math(self):
+        """A dollar after a \\\\ line break opens math; it isn't an escaped \\$."""
+        parsed = parse_latex("\\author{Jane Doe\\\\$^{1}$ Dept}\nSome studies show $x$ is true.")
+
+        assert "Some studies show  is true." in parsed
+
+    def test_multi_line_inline_match_at_line_start(self):
+        """A removed construct starting a line must not leave that line empty."""
+        latex = parse_latex(
+            "Supervised methods dominate\n\\footnote{See the survey\nby Smith.} while others lag.\n"
+            "Kernel methods\n$k(x,\ny)$ scale poorly."
+        )
+        markdown = parse_markdown(
+            "It is widely accepted that sleep aids consolidation\n<!-- TODO: check\nthis -->\n"
+            "(Walker, 2017)."
+        )
+
+        assert "\n\n" not in latex
+        assert "\n\n" not in markdown
+
+    def test_citation_after_punctuation_goes_before_it(self):
+        """A citation after the period stays with its sentence, not the next one."""
+        parsed = parse_latex("It was a failure.\\footcite{smith1990}\nResearch shows more.")
+
+        assert parsed == f"It was a failure {CITATION_PLACEHOLDER}.\nResearch shows more."
 
     def test_heading_title_with_nested_commands(self):
         parsed = parse_latex(

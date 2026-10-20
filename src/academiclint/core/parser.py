@@ -1,15 +1,21 @@
 """Document parsing utilities for AcademicLint."""
 
 import re
-from dataclasses import dataclass
+from collections.abc import Callable
+from dataclasses import dataclass, field
 from pathlib import Path
 
-# What citation commands such as \\cite{...} become; detectors treat it as a citation
-CITATION_PLACEHOLDER = "[citation]"
+# What citation commands such as \\cite{...} become; detectors treat it as a
+# citation. Its brackets (U+27E6/U+27E7) keep a "[citation]" typed in a draft as
+# a reminder from counting as one, and the parsers don't split them off.
+CITATION_PLACEHOLDER = "\u27e6citation\u27e7"
 
 # Marks the end of a heading's title until _finish splits headings off from
 # the text after them. Removed from the input first so it can't be forged.
 _HEADING_END = "\x1e"
+# Marks where a list item starts until _finish records it (and blanks it).
+# Removed from the input first, like _HEADING_END.
+_ITEM_START = "\x1a"
 
 
 @dataclass
@@ -19,6 +25,9 @@ class ParsedText:
     text: str
     # Source line (1-based) of each line of text; None when they are the same
     source_lines: list[int] | None = None
+    # Offsets in text where a sentence starts whatever the parser finds, such
+    # as list items, which rarely end with a full stop
+    sentence_starts: list[int] = field(default_factory=list)
 
     def source_line(self, line: int) -> int:
         """Map a 1-based line of the extracted text to its line in the source."""
@@ -72,27 +81,28 @@ def parse_file(path: Path | str) -> str:
     return parse_document(path).text
 
 
-def _sub_keep_lines(pattern: str, repl: str, text: str, *, inline: bool) -> str:
+def _sub_keep_lines(
+    pattern: str, repl: str | Callable[[re.Match[str]], str], text: str, *, inline: bool
+) -> str:
     """re.sub that keeps the line breaks of each replaced match.
 
     Flag positions are reported as line numbers in the parsed text, so they
     only point at the right source line if parsing never drops one. Removed
     block constructs (code blocks, figures) leave empty lines, which separate
-    paragraphs. Removed inline constructs (a \\cite spread over several lines)
-    mirror the source instead: a line stays empty only if it was blank in the
-    source, so a sentence around them stays whole and a real paragraph break
-    inside them is kept.
+    paragraphs. Removed inline constructs (a \\cite spread over several lines,
+    a footnote of two paragraphs) leave lines holding a space instead, so the
+    sentence around them stays whole.
     """
 
     def replace(match: re.Match[str]) -> str:
-        new = match.expand(repl)
+        new = repl(match) if callable(repl) else match.expand(repl)
         removed = match.group(0).count("\n") - new.count("\n")
         if removed <= 0:
             return new
         if not inline:
             return new + "\n" * removed
-        tail = match.group(0).split("\n")[-removed:]
-        return new + "".join("\n" + (" " if part.strip() else "") for part in tail)
+        # A space on every line, the first included: the match may start it
+        return new + " \n" * removed + " "
 
     return re.sub(pattern, replace, text)
 
@@ -134,9 +144,21 @@ def _convert_sections(text: str) -> str:
     return "".join(out)
 
 
+def _citation(match: re.Match[str]) -> str:
+    """The placeholder for a citation command, before any punctuation it follows."""
+    if match.group(1):
+        return f" {CITATION_PLACEHOLDER}{match.group(1)}"
+    return CITATION_PLACEHOLDER
+
+
 def _blank(match: re.Match[str]) -> str:
     """Replace a match with spaces, keeping columns on the line unchanged."""
     return " " * len(match.group(0))
+
+
+def _item(match: re.Match[str]) -> str:
+    """Replace a list marker with spaces, marking where the item starts."""
+    return " " * (len(match.group(0)) - 1) + _ITEM_START
 
 
 def _finish(text: str) -> ParsedText:
@@ -171,7 +193,9 @@ def _finish(text: str) -> ParsedText:
             source.append(number)
 
     text = "\n".join(out).rstrip()
-    return ParsedText(text, source[: text.count("\n") + 1])
+    starts = [i for i, c in enumerate(text) if c == _ITEM_START]
+    text = text.replace(_ITEM_START, " ")
+    return ParsedText(text, source[: text.count("\n") + 1], starts)
 
 
 def parse_markdown(content: str) -> str:
@@ -197,11 +221,12 @@ def markdown_to_text(content: str) -> ParsedText:
     Returns:
         Plain text with formatting removed, and its source line map
     """
-    text = content.replace(_HEADING_END, "")
+    text = content.replace(_HEADING_END, "").replace(_ITEM_START, "")
 
     # Remove code blocks
     text = _sub_keep_lines(r"```[\s\S]*?```", "", text, inline=False)
-    text = _sub_keep_lines(r"`[^`]+`", "", text, inline=True)
+    # A code span can't hold a blank line; a match across one is two stray backticks
+    text = _sub_keep_lines(r"`(?:[^`\n]|\n(?![ \t]*\n))+`", "", text, inline=True)
 
     # Remove images
     text = _sub_keep_lines(r"!\[([^\]]*)\]\([^)]+\)", r"\1", text, inline=True)
@@ -236,8 +261,8 @@ def markdown_to_text(content: str) -> ParsedText:
     # Remove blockquote and list markers ([ \t], not \s, so the blank line
     # before a list stays)
     text = re.sub(r"^>[ \t]*", _blank, text, flags=re.MULTILINE)
-    text = re.sub(r"^[ \t]*[-*+][ \t]+", _blank, text, flags=re.MULTILINE)
-    text = re.sub(r"^[ \t]*\d+\.[ \t]+", _blank, text, flags=re.MULTILINE)
+    text = re.sub(r"^[ \t]*[-*+][ \t]+", _item, text, flags=re.MULTILINE)
+    text = re.sub(r"^[ \t]*\d+\.[ \t]+", _item, text, flags=re.MULTILINE)
 
     return _finish(text)
 
@@ -265,7 +290,7 @@ def latex_to_text(content: str) -> ParsedText:
     Returns:
         Plain text with LaTeX commands removed, and its source line map
     """
-    text = content.replace(_HEADING_END, "")
+    text = content.replace(_HEADING_END, "").replace(_ITEM_START, "")
 
     # Remove comments
     text = re.sub(r"%.*$", "", text, flags=re.MULTILINE)
@@ -288,8 +313,12 @@ def latex_to_text(content: str) -> ParsedText:
 
     # Remove equations
     text = _sub_keep_lines(r"\$\$[\s\S]*?\$\$", "", text, inline=False)
-    # Inline math; an escaped \\$ is a literal dollar sign
-    text = _sub_keep_lines(r"(?<!\\)\$(?:[^$\\]|\\.)+\$", "", text, inline=True)
+    # Inline math. A dollar sign after an odd number of backslashes is a
+    # literal \\$; after an even number (a \\\\ line break) it opens math. Math
+    # can't hold a blank line, so a match across one is two stray dollar signs.
+    text = _sub_keep_lines(
+        r"(?<!\\)((?:\\\\)*)\$(?:[^$\\\n]|\\.|\n(?![ \t]*\n))+\$", r"\1", text, inline=True
+    )
     text = _sub_keep_lines(r"\\begin\{equation\}[\s\S]*?\\end\{equation\}", "", text, inline=False)
     text = _sub_keep_lines(r"\\begin\{align\}[\s\S]*?\\end\{align\}", "", text, inline=False)
 
@@ -299,10 +328,12 @@ def latex_to_text(content: str) -> ParsedText:
     # Remove formatting commands but keep content
     text = re.sub(r"\\(textbf|textit|emph|underline)\{([^}]+)\}", r"\2", text)
 
-    # Remove citations (keep as placeholder)
+    # Replace citations with a placeholder. One placed after the punctuation
+    # (".\\footcite{...}") goes before it instead, so it stays with the
+    # sentence it cites rather than joining that sentence to the next one.
     text = _sub_keep_lines(
-        r"\\(?:cite[pt]?|parencite|textcite|autocite|footcite)\*?(?:\[[^\]]*\])*\{[^}]+\}",
-        CITATION_PLACEHOLDER,
+        r"([.!?])?\\(?:cite[pt]?|parencite|textcite|autocite|footcite)\*?(?:\[[^\]]*\])*\{[^}]+\}",
+        _citation,
         text,
         inline=True,
     )
@@ -312,6 +343,9 @@ def latex_to_text(content: str) -> ParsedText:
 
     # Remove labels
     text = _sub_keep_lines(r"\\label\{[^}]+\}", "", text, inline=True)
+
+    # List items, marked so that each starts a sentence
+    text = re.sub(r"^[ \t]*\\item\b[ \t]*", _item, text, flags=re.MULTILINE)
 
     # Remove other common commands
     text = re.sub(r"\\(newpage|clearpage|pagebreak)", "", text)

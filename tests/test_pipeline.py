@@ -5,6 +5,7 @@ import spacy
 
 from academiclint import Linter
 from academiclint.core.exceptions import ModelLoadError, ModelNotFoundError, ProcessingError
+from academiclint.core.parser import CITATION_PLACEHOLDER
 from academiclint.core.pipeline import DEFAULT_MODEL, NLPPipeline
 from academiclint.core.result import FlagType
 
@@ -112,7 +113,9 @@ class TestCitationSplitOff:
     def sentences(doc):
         return [span.text.strip() for span in NLPPipeline._sentence_spans(doc)]
 
-    @pytest.mark.parametrize("citation", ["[12].", "[citation].", "[Smith 2019].", "[1, 2]."])
+    @pytest.mark.parametrize(
+        "citation", ["[12].", f"{CITATION_PLACEHOLDER}.", "[Smith 2019].", "[1, 2]."]
+    )
     def test_citation_only_sentence(self, citation):
         doc = presplit("Studies show that sleep loss impairs recall", citation)
 
@@ -129,6 +132,55 @@ class TestCitationSplitOff:
         doc = presplit("It is known.", "[12] Many experts agree.")
 
         assert self.sentences(doc) == ["It is known.", "[12] Many experts agree."]
+
+    def test_citation_only_on_the_next_line(self):
+        doc = presplit("Studies show that sleep loss impairs recall", "[12].", sep="\n")
+
+        assert self.sentences(doc) == ["Studies show that sleep loss impairs recall\n[12]."]
+
+    def test_citation_opening_the_next_line(self):
+        """List items without a full stop stay apart when the next opens with a citation."""
+        doc = presplit(
+            "It is widely believed that social media use causes anxiety",
+            "[4] found no such effect in adults",
+            sep="\n",
+        )
+
+        assert self.sentences(doc) == [
+            "It is widely believed that social media use causes anxiety",
+            "[4] found no such effect in adults",
+        ]
+
+    def test_split_at_sentence_start(self):
+        """A given start (a list item) splits a sentence the parser ran on."""
+        text = "It is widely believed that screen time causes insomnia\n[4] found no effect"
+        doc = presplit(text)
+
+        spans = NLPPipeline._sentence_spans(doc, [text.index("[4]") - 1])
+
+        assert [span.text.strip() for span in spans] == [
+            "It is widely believed that screen time causes insomnia",
+            "[4] found no effect",
+        ]
+
+    def test_no_citation_merge_at_sentence_start(self):
+        doc = presplit("Studies show that sleep loss impairs recall", "[12].", sep="\n")
+
+        spans = NLPPipeline._sentence_spans(doc, [doc.text.index("[12]")])
+
+        assert len(spans) == 2
+
+    def test_split_after_cited_sentence_end(self):
+        """A LaTeX citation ending a sentence ends it, whatever the parser says."""
+        doc = presplit(
+            f"Later accounts stress local elites {CITATION_PLACEHOLDER}.\n"
+            "Research shows that most petitions were rural."
+        )
+
+        assert self.sentences(doc) == [
+            f"Later accounts stress local elites {CITATION_PLACEHOLDER}.",
+            "Research shows that most petitions were rural.",
+        ]
 
     def test_citation_after_a_blank_line(self):
         doc = presplit("Introduction", "[12].", sep="\n\n")

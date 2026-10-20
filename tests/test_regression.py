@@ -623,6 +623,97 @@ class TestPreviouslyFixedBugs:
 
         assert not [f for f in Linter().check_file(path).flags if f.type == FlagType.JARGON_DENSE]
 
+    @pytest.mark.parametrize(
+        ("name", "source", "line"),
+        [
+            (
+                "list.md",
+                "Two lines of work are relevant:\n\n"
+                "- Many researchers believe that screen time causes insomnia\n"
+                "- [4] argue that the effect is small\n",
+                3,
+            ),
+            (
+                "list.tex",
+                "Two lines of work are relevant:\n\n\\begin{itemize}\n"
+                "\\item Many researchers believe that screen time causes insomnia\n"
+                "\\item \\citet{walker2017} argue that the effect is small\n\\end{itemize}\n",
+                4,
+            ),
+        ],
+    )
+    def test_bug_list_items_share_citations(self, tmp_path, name, source, line):
+        """
+        Bug: List items without a full stop ran together into one sentence, so
+        a citation in one item hid the flags of an uncited item next to it.
+        Expected: Each list item is a sentence of its own.
+        """
+        path = tmp_path / name
+        path.write_text(source, encoding="utf-8")
+
+        flags = Linter().check_file(path).flags
+
+        assert [f for f in flags if f.type == FlagType.WEASEL and f.line == line]
+
+    def test_bug_typed_citation_reminder_counted_as_citation(self):
+        """
+        Bug: The LaTeX citation placeholder "[citation]" was recognised in any
+        text, so a "[citation]" reminder typed in a draft hid the claim's flags.
+        Expected: Only a citation command counts; the typed reminder does not.
+        """
+        result = Linter().check("Studies show that remote work increases productivity [citation].")
+
+        assert [f for f in result.flags if f.type in (FlagType.CITATION_NEEDED, FlagType.WEASEL)]
+
+    def test_bug_citation_after_period_joined_next_sentence(self, tmp_path):
+        """
+        Bug: A citation placed after the period ("claim.\\footcite{...}") was
+        glued to it, so the next, uncited sentence ran into the cited one.
+        Expected: The cited claim is not flagged; the next sentence still is.
+        """
+        path = tmp_path / "history.tex"
+        path.write_text(
+            "Studies show that the reform failed.\\footcite{smith1990}\n"
+            "Research shows that most apprentices left.\n",
+            encoding="utf-8",
+        )
+        needs_citation = (FlagType.CITATION_NEEDED, FlagType.WEASEL)
+
+        flags = [f for f in Linter().check_file(path).flags if f.type in needs_citation]
+
+        assert {f.line for f in flags} == {2}
+
+    @staticmethod
+    def jargon_words(text, terms=()):
+        result = Linter(Config(domain_terms=list(terms))).check(text)
+        flags = [f for f in result.flags if f.type == FlagType.JARGON_DENSE]
+        return {word for f in flags for word in f.term.split(", ")}
+
+    @pytest.mark.parametrize(
+        ("text", "term", "words"),
+        [
+            (
+                "Ecologists modelled presence-absence observations using hierarchical occupancy.",
+                "presence/absence",
+                {"presence"},
+            ),
+            (
+                "Hydrostatic buoyancy follows Archimedes' principle under equilibrium conditions.",
+                "Archimedes' principle",
+                {"Archimedes", "principle"},
+            ),
+        ],
+    )
+    def test_bug_domain_phrase_joiner_variants(self, text, term, words):
+        """
+        Bug: A term joined by a slash no longer matched its hyphenated form, and
+        one with an apostrophe before a space ("Archimedes' principle") never
+        matched its own spelling.
+        Expected: The term's words are not counted as jargon.
+        """
+        assert words <= self.jargon_words(text)
+        assert not words & self.jargon_words(text, [term])
+
     def test_bug_unknown_domain_silently_ignored(self):
         """
         Bug: An unknown domain name was accepted without any error.
