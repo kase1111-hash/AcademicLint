@@ -333,6 +333,20 @@ class TestOutputOptions:
         assert proc.returncode == 0, proc.stderr.decode(errors="replace")
         assert "═" in proc.stdout.decode("utf-8")
 
+    def test_utf8_stdout_keeps_error_handler(self, monkeypatch):
+        """Switching a cp1252 stdout to UTF-8 must not reset its error handler."""
+        import io
+
+        from academiclint.cli.check import _use_utf8_stdout
+
+        stream = io.TextIOWrapper(io.BytesIO(), encoding="cp1252", errors="backslashreplace")
+        monkeypatch.setattr(sys, "stdout", stream)
+
+        _use_utf8_stdout()
+
+        assert stream.encoding == "utf-8"
+        assert stream.errors == "backslashreplace"
+
     def test_output_file_is_utf8(self, runner, vague_file, tmp_path):
         out = tmp_path / "report.txt"
 

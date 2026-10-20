@@ -48,7 +48,7 @@ class TestModelLoading:
         assert exc_info.value.model_name == DEFAULT_MODEL
 
     def test_broken_model_raises_model_load_error(self, monkeypatch):
-        """A model that is installed but fails to load is not a ProcessingError."""
+        """A load failure is a ModelLoadError, still catchable as ProcessingError."""
 
         def broken_load(name, *args, **kwargs):
             raise RuntimeError("corrupt model")
@@ -57,7 +57,7 @@ class TestModelLoading:
 
         with pytest.raises(ModelLoadError) as exc_info:
             NLPPipeline()._ensure_loaded()
-        assert not isinstance(exc_info.value, ProcessingError)
+        assert isinstance(exc_info.value, ProcessingError)
 
     def test_explicit_model_does_not_fall_back(self, monkeypatch):
         """A model requested by name must be that model, not a substitute."""

@@ -562,6 +562,22 @@ class TestPreviouslyFixedBugs:
         assert [f for f in plain.flags if f.type == FlagType.JARGON_DENSE]
         assert not [f for f in with_terms.flags if f.type == FlagType.JARGON_DENSE]
 
+    def test_bug_domain_phrase_own_joiners(self):
+        """
+        Bug: Multi-word domain terms only matched words joined by spaces or a
+        single hyphen, so "Kullback--Leibler", an en dash or "a/b" never matched.
+        Expected: A term matches its own spelling; spaces and dashes are
+        interchangeable.
+        """
+        text = "We minimise the Kullback--Leibler divergence and cross\u2013validation error estimates."
+        config = Config(domain_terms=["Kullback-Leibler divergence", "cross-validation"])
+
+        plain = Linter().check(text)
+        with_terms = Linter(config).check(text)
+
+        assert [f for f in plain.flags if f.type == FlagType.JARGON_DENSE]
+        assert not [f for f in with_terms.flags if f.type == FlagType.JARGON_DENSE]
+
     def test_bug_domain_phrase_matched_across_punctuation(self):
         """
         Bug: Multi-word domain terms matched across any punctuation, so
@@ -572,6 +588,26 @@ class TestPreviouslyFixedBugs:
         result = Linter(Config(domain_terms=["machine learning"])).check(text)
 
         assert [f for f in result.flags if f.type == FlagType.JARGON_DENSE]
+
+    @pytest.mark.parametrize(
+        "cite", ["\\cite{walker2017}", "\\citep[p.~5]{walker2017}", "\\parencite{walker2017}"]
+    )
+    def test_bug_latex_citations_not_recognised(self, tmp_path, cite):
+        """
+        Bug: \\cite{...} became "[citation]", which no citation pattern matched,
+        and \\citep/\\parencite were deleted, so every cited claim in a LaTeX
+        paper was flagged as needing a citation.
+        Expected: A cited claim is not flagged; an uncited one still is.
+        """
+        claim = "Recent studies show that sleep loss impairs recall"
+        cited = tmp_path / "cited.tex"
+        cited.write_text(f"{claim} {cite}.\n", encoding="utf-8")
+        uncited = tmp_path / "uncited.tex"
+        uncited.write_text(f"{claim}.\n", encoding="utf-8")
+        needs_citation = (FlagType.CITATION_NEEDED, FlagType.WEASEL)
+
+        assert not [f for f in Linter().check_file(cited).flags if f.type in needs_citation]
+        assert [f for f in Linter().check_file(uncited).flags if f.type in needs_citation]
 
     def test_bug_unknown_domain_silently_ignored(self):
         """

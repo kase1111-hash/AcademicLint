@@ -8,6 +8,25 @@ from academiclint.core.result import Flag, FlagType, Severity, Span
 from academiclint.detectors.base import Detector
 from academiclint.utils.patterns import COMMON_WORDS
 
+# Hyphen, soft hyphen and the Unicode hyphen/dash family
+_DASHES = "-\u00ad\u2010\u2011\u2012\u2013\u2014\u2015"
+
+
+def _joiner_pattern(joiner: str) -> str:
+    """Regex for the text between two words of a domain term.
+
+    Spaces and dashes are interchangeable ("cross validation", "cross-validation",
+    LaTeX "cross--validation"); an apostrophe may be straight or curly; any
+    other joiner ("/", "++") must appear as written. So "machine, learning"
+    does not match "machine learning".
+    """
+    joiner = joiner.strip()
+    if not joiner or all(c in _DASHES for c in joiner):
+        return rf"(?:\s+|\s*[{_DASHES}]{{1,3}}\s*)"
+    if joiner in ("'", "\u2019"):
+        return "['\u2019]"
+    return rf"\s*{re.escape(joiner)}\s*"
+
 
 class JargonDetector(Detector):
     """Detector for jargon-dense passages."""
@@ -29,12 +48,15 @@ class JargonDetector(Detector):
         domain_terms = {t.lower() for t in config.domain_terms}
         phrase_patterns = []
         for term in config.domain_terms:
-            tokens = re.findall(r"\w+", term.lower())
-            if len(tokens) == 1:
-                domain_terms.add(tokens[0])
-            elif len(tokens) > 1:
-                # Words may be joined by spaces or a hyphen, not other punctuation
-                phrase = r"(?:\s+|[-\u2010\u2011]\s*)".join(map(re.escape, tokens))
+            parts = re.split(r"(\w+)", term.lower())  # Joiners at even indexes
+            words = parts[1::2]
+            if len(words) == 1:
+                domain_terms.add(words[0])
+            elif len(words) > 1:
+                phrase = re.escape(words[0]) + "".join(
+                    _joiner_pattern(joiner) + re.escape(word)
+                    for joiner, word in zip(parts[2::2], words[1:], strict=False)
+                )
                 phrase_patterns.append(re.compile(rf"\b{phrase}\b", re.IGNORECASE))
 
         for sentence in doc.sentences:

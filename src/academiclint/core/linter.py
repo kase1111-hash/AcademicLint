@@ -101,6 +101,7 @@ class Linter:
         Raises:
             ValidationError: If the text is invalid (None, empty, or too long)
             ModelNotFoundError: If spaCy model is not installed
+            ModelLoadError: If spaCy or the model fails to load (a ProcessingError)
             ProcessingError: If NLP processing fails
             DetectorError: If a detector fails (only in strict mode)
         """

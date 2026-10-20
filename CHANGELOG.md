@@ -31,6 +31,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Reported line numbers for Markdown and LaTeX files (e.g. GitHub annotations)
   refer to the source file rather than the extracted text
 - A heading directly followed by text is analyzed as a paragraph of its own
+- `ModelLoadError` (a `ProcessingError`) is raised when spaCy or an installed
+  model fails to load; the CLI stops once instead of failing every file
 - A domain file's `parent` path is resolved relative to that file
 
 ### Fixed
@@ -57,6 +59,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Non-UTF-8 stdin crashed with a traceback; so did text longer than spaCy
   accepts, which also stopped the remaining files
 - A Markdown heading ending in '#' lost it ("C#" became "C")
+- LaTeX citations were never recognised: `\cite{...}` became a placeholder no
+  citation check matched, and `\citep`/`\parencite`/... were deleted, so every
+  cited claim was flagged as needing a citation
+- A `<` in Markdown prose (e.g. "p < .001") was taken for an HTML tag and the
+  text up to the next `>` was deleted; an escaped `\$` in LaTeX was taken for
+  math
+- A multi-line `\cite`/`\ref`/`\label` split its sentence, and a LaTeX section
+  title containing a command (`\emph{...}`) was cut short
+- Domain terms joined by an apostrophe, slash, en dash or LaTeX `--` did not
+  match their own spelling, while "machine, learning" matched "machine
+  learning"
 - `--quiet` had no effect (terminal and Markdown output); `check -` (stdin) was
   rejected
 - GitHub output broke on newlines in messages and ignored `--min-density`

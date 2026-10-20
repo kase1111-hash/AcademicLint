@@ -63,6 +63,7 @@ CITATION_PATTERNS = [
     r"[A-Z][a-z]+\s+\(\d{4}\)",  # Author (2023)
     r"\[\d+(?:,\s*\d+)*\]",  # [1] or [1, 2, 3]
     r"\[[\w\s,]+\d{4}\]",  # [Author 2023]
+    r"\[citation\]",  # What the LaTeX parser makes of \cite{...}
 ]
 
 # Weasel word patterns

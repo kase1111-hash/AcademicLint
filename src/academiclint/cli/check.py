@@ -11,6 +11,7 @@ import click
 from academiclint.core.exceptions import (
     AcademicLintError,
     EmptyTextError,
+    ModelLoadError,
     ParsingError,
     ProcessingError,
     ValidationError,
@@ -42,14 +43,7 @@ def run_check(
     output_path: str | None,
 ):
     """Run the check command, reporting expected failures without a traceback."""
-    # Reports contain characters such as '═' and '→'; write redirected output
-    # as UTF-8 whatever the locale (e.g. cp1252 on Windows)
-    if (
-        isinstance(sys.stdout, io.TextIOWrapper)
-        and not sys.stdout.isatty()
-        and sys.stdout.encoding.lower().replace("-", "") != "utf8"
-    ):
-        sys.stdout.reconfigure(encoding="utf-8", errors=sys.stdout.errors)
+    _use_utf8_stdout()
 
     try:
         _run_check(
@@ -174,6 +168,8 @@ def _check_files(linter: "Linter", files: tuple) -> tuple[dict[Path, "AnalysisRe
             else:
                 click.echo(f"Error: {path}: {e}", err=True)
                 failed += 1
+        except ModelLoadError:
+            raise  # Not specific to this file; stop the run
         except (ValidationError, ParsingError, ProcessingError, OSError) as e:
             # ProcessingError: e.g. text longer than spaCy accepts. A missing
             # or broken model (ModelNotFoundError, ModelLoadError) stops the run.
@@ -218,6 +214,20 @@ def _expand_paths(files: tuple) -> list[tuple[Path, bool]]:
             )
         paths.extend((p, True) for p in found)
     return paths
+
+
+def _use_utf8_stdout() -> None:
+    """Write redirected output as UTF-8 whatever the locale.
+
+    Reports contain characters such as '═' and '→', which a cp1252 stdout
+    (Windows) can't encode. The stream's error handler is kept.
+    """
+    if (
+        isinstance(sys.stdout, io.TextIOWrapper)
+        and not sys.stdout.isatty()
+        and sys.stdout.encoding.lower().replace("-", "") != "utf8"
+    ):
+        sys.stdout.reconfigure(encoding="utf-8", errors=sys.stdout.errors)
 
 
 def _is_file(path: Path) -> bool:

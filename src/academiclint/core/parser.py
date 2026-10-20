@@ -4,6 +4,9 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
+# What citation commands such as \\cite{...} become; detectors treat it as a citation
+CITATION_PLACEHOLDER = "[citation]"
+
 # Marks the end of a heading's title until _finish splits headings off from
 # the text after them. Removed from the input first so it can't be forged.
 _HEADING_END = "\x1e"
@@ -75,16 +78,60 @@ def _sub_keep_lines(pattern: str, repl: str, text: str, *, inline: bool) -> str:
     Flag positions are reported as line numbers in the parsed text, so they
     only point at the right source line if parsing never drops one. Removed
     block constructs (code blocks, figures) leave empty lines, which separate
-    paragraphs; removed inline constructs (a \\cite spread over several lines)
-    leave lines holding a space, so the sentence around them stays whole.
+    paragraphs. Removed inline constructs (a \\cite spread over several lines)
+    mirror the source instead: a line stays empty only if it was blank in the
+    source, so a sentence around them stays whole and a real paragraph break
+    inside them is kept.
     """
-    pad = " \n" if inline else "\n"
 
     def replace(match: re.Match[str]) -> str:
         new = match.expand(repl)
-        return new + pad * max(match.group(0).count("\n") - new.count("\n"), 0)
+        removed = match.group(0).count("\n") - new.count("\n")
+        if removed <= 0:
+            return new
+        if not inline:
+            return new + "\n" * removed
+        tail = match.group(0).split("\n")[-removed:]
+        return new + "".join("\n" + (" " if part.strip() else "") for part in tail)
 
     return re.sub(pattern, replace, text)
+
+
+_SECTION = re.compile(r"\\(?:section|subsection|subsubsection|chapter)\*?(?:\[[^\]\n]*\])?\{")
+
+
+def _convert_sections(text: str) -> str:
+    """Replace LaTeX section commands with their titles, marked as headings.
+
+    The title's closing brace is found by counting braces (escaped ones
+    excepted), so titles holding commands such as \\emph{...} at any depth
+    are kept whole; those commands are removed later. A title whose braces
+    don't balance on its line is left for the later clean-up.
+    """
+    out = []
+    pos = 0
+    for match in _SECTION.finditer(text):
+        if match.start() < pos:
+            continue
+        depth = 1
+        i = match.end()
+        while i < len(text) and text[i] != "\n":
+            if text[i] == "\\":
+                i += 2
+                continue
+            if text[i] == "{":
+                depth += 1
+            elif text[i] == "}":
+                depth -= 1
+                if depth == 0:
+                    break
+            i += 1
+        if depth:
+            continue
+        out += [text[pos : match.start()], text[match.end() : i].strip(), _HEADING_END]
+        pos = i + 1
+    out.append(text[pos:])
+    return "".join(out)
 
 
 def _blank(match: re.Match[str]) -> str:
@@ -162,8 +209,10 @@ def markdown_to_text(content: str) -> ParsedText:
     # Convert links to just text
     text = _sub_keep_lines(r"\[([^\]]+)\]\([^)]+\)", r"\1", text, inline=True)
 
-    # Remove HTML tags
-    text = _sub_keep_lines(r"<[^>]+>", "", text, inline=True)
+    # Remove HTML comments and tags. A tag must start like one ("<a", "</a"),
+    # so "p < .001" ... ">" is not taken for a tag and deleted.
+    text = _sub_keep_lines(r"<!--[\s\S]*?-->", "", text, inline=True)
+    text = _sub_keep_lines(r"</?[A-Za-z][^<>]*>", "", text, inline=True)
 
     # Remove horizontal rules
     text = re.sub(r"^[-*_]{3,}[ \t]*$", "", text, flags=re.MULTILINE)
@@ -239,24 +288,24 @@ def latex_to_text(content: str) -> ParsedText:
 
     # Remove equations
     text = _sub_keep_lines(r"\$\$[\s\S]*?\$\$", "", text, inline=False)
-    text = _sub_keep_lines(r"\$[^$]+\$", "", text, inline=True)
+    # Inline math; an escaped \\$ is a literal dollar sign
+    text = _sub_keep_lines(r"(?<!\\)\$(?:[^$\\]|\\.)+\$", "", text, inline=True)
     text = _sub_keep_lines(r"\\begin\{equation\}[\s\S]*?\\end\{equation\}", "", text, inline=False)
     text = _sub_keep_lines(r"\\begin\{align\}[\s\S]*?\\end\{align\}", "", text, inline=False)
 
-    # Convert section commands to their titles (which may hold one level of
-    # braces, e.g. \\emph{...}; those commands are removed further down)
-    text = re.sub(
-        r"\\(?:section|subsection|subsubsection|chapter)\*?(?:\[[^\]\n]*\])?"
-        r"\{((?:[^{}\n]|\{[^{}\n]*\})+)\}",
-        lambda m: m.group(1).strip() + _HEADING_END,
-        text,
-    )
+    # Convert section commands to their titles
+    text = _convert_sections(text)
 
     # Remove formatting commands but keep content
     text = re.sub(r"\\(textbf|textit|emph|underline)\{([^}]+)\}", r"\2", text)
 
     # Remove citations (keep as placeholder)
-    text = _sub_keep_lines(r"\\cite\{[^}]+\}", "[citation]", text, inline=True)
+    text = _sub_keep_lines(
+        r"\\(?:cite[pt]?|parencite|textcite|autocite|footcite)\*?(?:\[[^\]]*\])*\{[^}]+\}",
+        CITATION_PLACEHOLDER,
+        text,
+        inline=True,
+    )
 
     # Remove references
     text = _sub_keep_lines(r"\\ref\{[^}]+\}", "[ref]", text, inline=True)

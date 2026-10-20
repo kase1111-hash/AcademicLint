@@ -120,6 +120,38 @@ class TestStructure:
         assert "\n\n" not in parsed.text
         assert parsed.text.count("\n") == source.rstrip().count("\n")
 
+    def test_multi_line_citation_ending_its_line(self):
+        """The closing brace's line must not be left empty either."""
+        parsed = parse_latex("Several studies \\cite{a,\n b,\n c}\nhave shown it.")
+
+        assert "\n\n" not in parsed
+
+    def test_blank_line_inside_removed_construct_kept(self):
+        """A real paragraph break inside a removed construct stays a break."""
+        parsed = parse_latex("Next para with $x\n\ny$ math.")
+
+        assert "\n\n" in parsed
+
+    def test_less_than_sign_is_not_an_html_tag(self):
+        """'p < .001' must not swallow text up to the next '>' (a quote marker)."""
+        source = "Recall improved (p < .001).\n\n## Discussion\n\n> Rest is good."
+
+        assert parse_markdown(source).split("\n\n") == [
+            "Recall improved (p < .001).",
+            "   Discussion",
+            "  Rest is good.",
+        ]
+
+    def test_escaped_dollars_are_not_math(self):
+        assert parse_latex("It costs \\$5 and then \\$10.") == "It costs \\$5 and then \\$10."
+
+    def test_heading_title_with_nested_commands(self):
+        parsed = parse_latex(
+            "\\section{\\texorpdfstring{\\emph{In vitro}}{In vitro}}\nFreedom is being free."
+        )
+
+        assert parsed.split("\n\n") == ["In vitro", "Freedom is being free."]
+
     def test_heading_followed_by_blank_line_unchanged(self):
         assert parse_markdown("## Methods\n\nWe did things.") == "   Methods\n\nWe did things."
 

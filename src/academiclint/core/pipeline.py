@@ -172,6 +172,7 @@ class NLPPipeline:
 
         Raises:
             ModelNotFoundError: If the spaCy model is not installed
+            ModelLoadError: If spaCy or the model fails to load (a ProcessingError)
             ProcessingError: If NLP processing fails
         """
         nlp = self._ensure_loaded()
