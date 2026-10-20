@@ -194,21 +194,28 @@ def _mark_list_items(text: str) -> str:
     paragraph, so a wrapped line starting "2019. The..." stays text.
     """
     lines = text.split("\n")
-    in_list = False  # After a list item, up to the next unindented paragraph
+    indents: set[int] = set()  # Of the open list's markers, up to an unindented paragraph
     prev_blank = True
     for i, line in enumerate(lines):
         match = _BULLET.match(line) or _NUMBERED.match(line)
-        if match and match.re is _NUMBERED and not (prev_blank or in_list):
-            match = None if match.group(1) != "1" else match
+        indent = len(line) - len(line.lstrip())
+        if match and match.re is _NUMBERED and match.group(1) != "1" and not prev_blank:
+            # Without a blank line before it, only a sibling of an earlier item
+            # ("1. A\n\n   para.\n2. B"), not "   2019. Most..." inside one
+            match = match if indent in indents else None
         if match:
             lines[i] = _item(match) + line[match.end() :]
-            in_list = True
-        elif line.strip() and not line[:1].isspace():
-            in_list = False
+            indents.add(indent)
+        elif line.strip() and not indent and prev_blank:
+            indents = set()  # A paragraph after the list, not an item's wrapped line
         prev_blank = not line.strip()
     return "\n".join(lines)
 
 
+# A setext heading's underline
+_SETEXT = re.compile(r"=+|-+")
+# Where a sentence ends inside a line, closing quotes or a citation included
+_CLAUSE_START = re.compile(r"[.!?:][\"'\u201d\u2019)\]]*(?:\[[^\]]*\])?\s")
 # Words a lead-in clause can end with however short it is ("Research suggests that")
 _LEAD_IN_END = re.compile(
     r"that|as|by|of|to|for|from|with|in|on|at|includ(?:e|es|ing)|are|is|were|was|be|such"
@@ -231,10 +238,12 @@ def _continues(block: list[str], in_list: bool) -> bool:
     words = prev.split()
     if prev.endswith((",", ";")) or (words and words[-1].lower() in ("and", "or")):
         return True
-    if in_list or not words or _LINE_END.search(prev):
+    if in_list or not words or _LINE_END.search(prev) or _SETEXT.fullmatch(prev.strip()):
         return False
-    clause = re.split(r"[.!?:]\s", " ".join(block))[-1].split()
-    return len(clause) >= 4 or bool(_LEAD_IN_END.fullmatch(clause[-1]))
+    # The clause since the last sentence end ("...weeks. Lee [4] observed"),
+    # or the whole line if longer: "et al. " is not a sentence end
+    clause = _CLAUSE_START.split(" ".join(block))[-1].split()
+    return max(len(clause), len(words)) >= 4 or bool(_LEAD_IN_END.fullmatch(clause[-1]))
 
 
 def _finish(text: str) -> ParsedText:
@@ -435,7 +444,11 @@ def latex_to_text(content: str) -> ParsedText:
     # Remove labels
     text = _sub_keep_lines(r"\\label\{[^}]+\}", "", text, inline=True)
 
-    # List items, marked so that each starts a sentence
+    # List items, marked so that each starts a sentence; list environments
+    # go, with their options ("\\begin{itemize}[noitemsep]")
+    text = re.sub(
+        r"\\(?:begin|end)\{(?:itemize|enumerate|description)\}(?:\[[^\]\n]*\])?", "", text
+    )
     text = re.sub(r"^[ \t]*\\item\b[ \t]*", _item, text, flags=re.MULTILINE)
 
     # Remove other common commands

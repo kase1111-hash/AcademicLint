@@ -217,6 +217,11 @@ class TestCitationSplitOff:
             ),
             # A subject without a verb of its own takes the citation with it
             ("Many researchers", "[12] argue that it matters.", {"argue": ("VERB", "VBP")}),
+            (
+                "Although it is unclear, many researchers",
+                "[12] argue that it matters.",
+                {"is": ("AUX", "VBZ"), "argue": ("VERB", "VBP")},
+            ),
         ],
     )
     def test_citation_carrying_on_the_line_before(self, claim, rest, tags):
@@ -237,6 +242,9 @@ class TestCitationSplitOff:
         line_end = presplit("Studies show that naps help\n[citation needed]\nExperts agree [12].")
 
         assert self.sentences(doc) == ["Naps help [citation needed].", "Mednick (2003) found more."]
+        # Not after a citation: the next word is often a name
+        cited = presplit("As reported in [12]\nSmith et al. showed that most recovered.")
+        assert len(self.sentences(cited)) == 1
         assert self.sentences(line_end) == [
             "Studies show that naps help\n[citation needed]",
             "Experts agree [12].",

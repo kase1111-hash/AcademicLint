@@ -350,12 +350,15 @@ class NLPPipeline:
 
         before holds the last two non-space tokens' text and gap the space
         after them; the next word is capitalised. That is the case after
-        "...instead [citation]." and after a citation ending its line with no
-        full stop ("...accidents\n[citation needed]\nExperts agree...").
+        "...instead [citation]." and after a reminder ending its line with no
+        full stop ("...accidents\n[citation needed]\nExperts agree..."). Not
+        after a citation ending its line ("As reported in [12]\nSmith et
+        al. showed"), where the next word is often a name.
         """
         if before[0] in _CITATION_CLOSE and before[1] in (".", "!", "?"):
             return True
-        return before[1] in _CITATION_CLOSE and "\n" in gap
+        reminder_end = before[0].lower() in ("citation", "needed") and before[1] == "]"
+        return reminder_end and "\n" in gap
 
     @staticmethod
     def _continues_with_citation(prev: Any, span: Any) -> bool:
@@ -392,8 +395,12 @@ class NLPPipeline:
             after = doc[start].idx + leading.end()
             following = next((t for t in doc[start : span.end] if t.idx >= after), None)
             if following is not None and following.tag_ in _FINITE_VERB:
-                before = doc[max(prev.start, end - 50) : end]
-                return not any(t.pos_ in ("VERB", "AUX") for t in before)
+                # Not "Although X is unclear, many researchers" or "Researchers
+                # studying X": only a finite verb after the last comma counts
+                before = list(doc[max(prev.start, end - 50) : end])
+                commas = [i for i, t in enumerate(before) if t.text == ","]
+                clause = before[commas[-1] + 1 :] if commas else before
+                return not any(t.tag_ in _FINITE_VERB for t in clause)
         return True
 
     @staticmethod

@@ -83,7 +83,7 @@ class TestSourceLines:
         markdown = markdown_to_text("Two groups:\n- first item\n  wrapped\n1. second item\n")
         stars = markdown_to_text("Two groups:\n* first item\n* second item\n")
         latex = latex_to_text(
-            "Two groups:\n\\begin{itemize}\n  \\item first item\n\\item second item\n"
+            "Two groups:\n\\begin{itemize}[noitemsep]\n  \\item first item\n\\item second item\n"
         )
 
         for parsed in (markdown, stars, latex):
@@ -93,6 +93,7 @@ class TestSourceLines:
                 "second item",
             ]
         assert markdown.text.splitlines()[1].index("first") == 2
+        assert "noitemsep" not in latex.text
 
     def test_list_items_continuing_a_sentence(self):
         """Items that carry on the sentence before them don't start sentences."""
@@ -107,6 +108,7 @@ class TestSourceLines:
         [
             "**Strengths**",
             "Results\n=======",
+            "Key findings of the review\n==========",
             "This is well documented.[^1]",
             'Some called it "a failure."',
         ],
@@ -128,6 +130,9 @@ class TestSourceLines:
             ),
             # A short lead-in clause too; the next item starts a new sentence
             ("Research suggests that\n- a holds (Lee, 2021)\n- b holds (Kim, 2020)\n", 1),
+            # A lead-in after a sentence on the same line, or after "et al."
+            ("Sleep was tracked for two weeks. Lee [4] observed\n- that 40% slept less\n", 0),
+            ("In a cohort of 2,000 adolescents,\nHale et al. [7] found\n- a 30% rise\n", 0),
         ],
     )
     def test_list_after_lead_in_clause(self, source, starts):
@@ -138,9 +143,15 @@ class TestSourceLines:
         parsed = markdown_to_text(
             "1. Recruitment\n\n   Schools were contacted.\n2. Consent was given\n"
         )
+        lazy = markdown_to_text("1. item one that\nwraps here\n2. item two\n")
+        year = markdown_to_text(
+            "1. Approval was granted in\n   2019. Most parents agreed.\n2. Next\n"
+        )
 
         assert len(parsed.sentence_starts) == 2
         assert "2." not in parsed.text
+        assert len(lazy.sentence_starts) == 2
+        assert "2019. Most parents agreed." in year.text
 
     def test_year_starting_a_wrapped_line_is_not_a_list(self):
         """As in CommonMark, only "1." can start a list inside a paragraph."""
