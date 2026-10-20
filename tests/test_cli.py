@@ -102,14 +102,14 @@ class TestInput:
         assert [r["file"] for r in json.loads(result.stdout)] == [str(vague_file)]
 
     def test_unreadable_entry_does_not_stop_directory_run(self, runner, tmp_path, monkeypatch):
-        """An entry that can't be stat'ed (e.g. in a non-searchable dir) is skipped."""
+        """An entry that can't be stat'ed (e.g. in a non-searchable dir) fails on its own."""
         (tmp_path / "a.md").write_text(VAGUE_TEXT)
         locked = tmp_path / "b.md"
         locked.write_text(VAGUE_TEXT)
         is_file = Path.is_file
 
         def fake_is_file(self):
-            if self == locked:
+            if self.name == "b.md":
                 raise PermissionError(13, "Permission denied", str(self))
             return is_file(self)
 
@@ -117,9 +117,25 @@ class TestInput:
 
         result = runner.invoke(cli, ["check", str(tmp_path), "--format", "json"])
 
-        assert result.exit_code == 0, result.output
-        assert f"skipping {locked}" in result.output
+        assert result.exit_code == EXIT_ERROR
+        assert f"Error: {locked}:" in result.output
         assert [r["file"] for r in json.loads(result.stdout)] == [str(tmp_path / "a.md")]
+
+    def test_broken_model_reported_once(self, runner, vague_file, tmp_path, monkeypatch):
+        """A spaCy load failure stops the run instead of repeating for every file."""
+        import spacy
+
+        def broken_load(name, *args, **kwargs):
+            raise RuntimeError("corrupt model")
+
+        monkeypatch.setattr(spacy, "load", broken_load)
+        other = tmp_path / "other.md"
+        other.write_text(VAGUE_TEXT)
+
+        result = runner.invoke(cli, ["check", str(vague_file), str(other)])
+
+        assert result.exit_code == EXIT_ERROR
+        assert result.output.count("Failed to load spaCy model") == 1
 
     def test_text_too_long_for_spacy_does_not_stop_the_others(self, runner, vague_file, tmp_path):
         huge = tmp_path / "huge.txt"

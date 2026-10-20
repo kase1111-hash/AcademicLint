@@ -562,6 +562,17 @@ class TestPreviouslyFixedBugs:
         assert [f for f in plain.flags if f.type == FlagType.JARGON_DENSE]
         assert not [f for f in with_terms.flags if f.type == FlagType.JARGON_DENSE]
 
+    def test_bug_domain_phrase_matched_across_punctuation(self):
+        """
+        Bug: Multi-word domain terms matched across any punctuation, so
+        "machine, learning" counted as the term "machine learning".
+        Expected: Only spaces or a hyphen join the words of a term.
+        """
+        text = "After reconfiguring the machine, learning interoperability became easy."
+        result = Linter(Config(domain_terms=["machine learning"])).check(text)
+
+        assert [f for f in result.flags if f.type == FlagType.JARGON_DENSE]
+
     def test_bug_unknown_domain_silently_ignored(self):
         """
         Bug: An unknown domain name was accepted without any error.

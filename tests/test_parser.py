@@ -99,6 +99,27 @@ class TestStructure:
     def test_heading_with_text_on_the_same_line(self):
         assert parse_latex("\\section{Results} We found things.") == "Results\n\nWe found things."
 
+    def test_heading_followed_by_line_left_blank(self):
+        """A \\label (with a comment) under a heading leaves only spaces behind."""
+        parsed = parse_latex("\\section{Background}\n\\label{sec:b} % c\nDemocracy is a system.")
+
+        assert parsed.split("\n\n")[0] == "Background"
+
+    def test_heading_title_with_formatting(self):
+        parsed = parse_latex("\\section{The Meaning of \\emph{Freedom} Today}\nFreedom is free.")
+
+        assert parsed == "The Meaning of Freedom Today\n\nFreedom is free."
+
+    def test_multi_line_citation_keeps_sentence_whole(self):
+        """Lines freed by an inline command must not become paragraph breaks."""
+        source = (
+            "Recent studies show \\cite{\n  smith2019,\n  jones2020\n} that this was a trial.\n"
+        )
+        parsed = latex_to_text(source)
+
+        assert "\n\n" not in parsed.text
+        assert parsed.text.count("\n") == source.rstrip().count("\n")
+
     def test_heading_followed_by_blank_line_unchanged(self):
         assert parse_markdown("## Methods\n\nWe did things.") == "   Methods\n\nWe did things."
 

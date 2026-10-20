@@ -4,7 +4,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
-from academiclint.core.exceptions import ModelNotFoundError, ProcessingError
+from academiclint.core.exceptions import ModelLoadError, ModelNotFoundError, ProcessingError
 from academiclint.core.result import Span
 
 logger = logging.getLogger(__name__)
@@ -124,7 +124,7 @@ class NLPPipeline:
 
         Raises:
             ModelNotFoundError: If no candidate spaCy model is installed
-            ProcessingError: If spaCy fails to load for other reasons
+            ModelLoadError: If spaCy or the model fails to load for other reasons
         """
         if self._nlp is not None:
             return self._nlp
@@ -132,7 +132,7 @@ class NLPPipeline:
         try:
             import spacy
         except Exception as e:
-            raise ProcessingError("Failed to import spaCy", original_error=e) from e
+            raise ModelLoadError("Failed to import spaCy", original_error=e) from e
 
         for candidate in self._candidates:
             logger.info("Loading spaCy model: %s", candidate)
@@ -143,7 +143,7 @@ class NLPPipeline:
                 continue
             except Exception as e:
                 logger.error("Failed to load spaCy model: %s", e)
-                raise ProcessingError(
+                raise ModelLoadError(
                     f"Failed to load spaCy model '{candidate}'",
                     original_error=e,
                 ) from e

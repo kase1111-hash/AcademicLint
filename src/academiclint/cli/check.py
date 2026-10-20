@@ -44,8 +44,12 @@ def run_check(
     """Run the check command, reporting expected failures without a traceback."""
     # Reports contain characters such as '═' and '→'; write redirected output
     # as UTF-8 whatever the locale (e.g. cp1252 on Windows)
-    if isinstance(sys.stdout, io.TextIOWrapper) and not sys.stdout.isatty():
-        sys.stdout.reconfigure(encoding="utf-8")
+    if (
+        isinstance(sys.stdout, io.TextIOWrapper)
+        and not sys.stdout.isatty()
+        and sys.stdout.encoding.lower().replace("-", "") != "utf8"
+    ):
+        sys.stdout.reconfigure(encoding="utf-8", errors=sys.stdout.errors)
 
     try:
         _run_check(
@@ -172,7 +176,7 @@ def _check_files(linter: "Linter", files: tuple) -> tuple[dict[Path, "AnalysisRe
                 failed += 1
         except (ValidationError, ParsingError, ProcessingError, OSError) as e:
             # ProcessingError: e.g. text longer than spaCy accepts. A missing
-            # model (ModelNotFoundError) still stops the run.
+            # or broken model (ModelNotFoundError, ModelLoadError) stops the run.
             click.echo(f"Error: {path}: {e}", err=True)
             failed += 1
 
@@ -217,12 +221,16 @@ def _expand_paths(files: tuple) -> list[tuple[Path, bool]]:
 
 
 def _is_file(path: Path) -> bool:
-    """Return whether path is a file, warning instead of failing if it can't be read."""
+    """Return whether path is a file.
+
+    A path that can't be checked (e.g. in a directory without search
+    permission) counts as a file, so checking it reports the error for that
+    file instead of the whole run stopping here.
+    """
     try:
         return path.is_file()
-    except OSError as e:
-        click.echo(f"Warning: skipping {path}: {e}", err=True)
-        return False
+    except OSError:
+        return True
 
 
 def _read_stdin() -> str:

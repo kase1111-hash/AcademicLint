@@ -69,18 +69,22 @@ def parse_file(path: Path | str) -> str:
     return parse_document(path).text
 
 
-def _sub_keep_lines(pattern: str, repl: str, text: str, flags: int = 0) -> str:
+def _sub_keep_lines(pattern: str, repl: str, text: str, *, inline: bool) -> str:
     """re.sub that keeps the line breaks of each replaced match.
 
     Flag positions are reported as line numbers in the parsed text, so they
-    only point at the right source line if parsing never adds or drops one.
+    only point at the right source line if parsing never drops one. Removed
+    block constructs (code blocks, figures) leave empty lines, which separate
+    paragraphs; removed inline constructs (a \\cite spread over several lines)
+    leave lines holding a space, so the sentence around them stays whole.
     """
+    pad = " \n" if inline else "\n"
 
     def replace(match: re.Match[str]) -> str:
         new = match.expand(repl)
-        return new + "\n" * max(match.group(0).count("\n") - new.count("\n"), 0)
+        return new + pad * max(match.group(0).count("\n") - new.count("\n"), 0)
 
-    return re.sub(pattern, replace, text, flags=flags)
+    return re.sub(pattern, replace, text)
 
 
 def _blank(match: re.Match[str]) -> str:
@@ -113,8 +117,9 @@ def _finish(text: str) -> ParsedText:
             # Text on the heading's own line, e.g. \section{Results} We found...
             out += ["", rest]
             source += [number, number]
-        elif number < len(lines) and lines[number].strip():
-            # Text on the next line
+        elif number < len(lines) and lines[number] != "":
+            # Text on the next line. A line left holding only spaces (e.g. by a
+            # removed \\label) is not a paragraph break, so it gets one too.
             out.append("")
             source.append(number)
 
@@ -148,17 +153,17 @@ def markdown_to_text(content: str) -> ParsedText:
     text = content.replace(_HEADING_END, "")
 
     # Remove code blocks
-    text = _sub_keep_lines(r"```[\s\S]*?```", "", text)
-    text = _sub_keep_lines(r"`[^`]+`", "", text)
+    text = _sub_keep_lines(r"```[\s\S]*?```", "", text, inline=False)
+    text = _sub_keep_lines(r"`[^`]+`", "", text, inline=True)
 
     # Remove images
-    text = _sub_keep_lines(r"!\[([^\]]*)\]\([^)]+\)", r"\1", text)
+    text = _sub_keep_lines(r"!\[([^\]]*)\]\([^)]+\)", r"\1", text, inline=True)
 
     # Convert links to just text
-    text = _sub_keep_lines(r"\[([^\]]+)\]\([^)]+\)", r"\1", text)
+    text = _sub_keep_lines(r"\[([^\]]+)\]\([^)]+\)", r"\1", text, inline=True)
 
     # Remove HTML tags
-    text = _sub_keep_lines(r"<[^>]+>", "", text)
+    text = _sub_keep_lines(r"<[^>]+>", "", text, inline=True)
 
     # Remove horizontal rules
     text = re.sub(r"^[-*_]{3,}[ \t]*$", "", text, flags=re.MULTILINE)
@@ -230,17 +235,19 @@ def latex_to_text(content: str) -> ParsedText:
         text = re.sub(rf"\\end\{{{env}\}}", "", text)
 
     # Remove figure/table environments entirely
-    text = _sub_keep_lines(r"\\begin\{(figure|table)\}[\s\S]*?\\end\{\1\}", "", text)
+    text = _sub_keep_lines(r"\\begin\{(figure|table)\}[\s\S]*?\\end\{\1\}", "", text, inline=False)
 
     # Remove equations
-    text = _sub_keep_lines(r"\$\$[\s\S]*?\$\$", "", text)
-    text = _sub_keep_lines(r"\$[^$]+\$", "", text)
-    text = _sub_keep_lines(r"\\begin\{equation\}[\s\S]*?\\end\{equation\}", "", text)
-    text = _sub_keep_lines(r"\\begin\{align\}[\s\S]*?\\end\{align\}", "", text)
+    text = _sub_keep_lines(r"\$\$[\s\S]*?\$\$", "", text, inline=False)
+    text = _sub_keep_lines(r"\$[^$]+\$", "", text, inline=True)
+    text = _sub_keep_lines(r"\\begin\{equation\}[\s\S]*?\\end\{equation\}", "", text, inline=False)
+    text = _sub_keep_lines(r"\\begin\{align\}[\s\S]*?\\end\{align\}", "", text, inline=False)
 
-    # Convert section commands to their titles
+    # Convert section commands to their titles (which may hold one level of
+    # braces, e.g. \\emph{...}; those commands are removed further down)
     text = re.sub(
-        r"\\(?:section|subsection|subsubsection|chapter)\*?(?:\[[^\]\n]*\])?\{([^}\n]+)\}",
+        r"\\(?:section|subsection|subsubsection|chapter)\*?(?:\[[^\]\n]*\])?"
+        r"\{((?:[^{}\n]|\{[^{}\n]*\})+)\}",
         lambda m: m.group(1).strip() + _HEADING_END,
         text,
     )
@@ -249,20 +256,20 @@ def latex_to_text(content: str) -> ParsedText:
     text = re.sub(r"\\(textbf|textit|emph|underline)\{([^}]+)\}", r"\2", text)
 
     # Remove citations (keep as placeholder)
-    text = _sub_keep_lines(r"\\cite\{[^}]+\}", "[citation]", text)
+    text = _sub_keep_lines(r"\\cite\{[^}]+\}", "[citation]", text, inline=True)
 
     # Remove references
-    text = _sub_keep_lines(r"\\ref\{[^}]+\}", "[ref]", text)
+    text = _sub_keep_lines(r"\\ref\{[^}]+\}", "[ref]", text, inline=True)
 
     # Remove labels
-    text = _sub_keep_lines(r"\\label\{[^}]+\}", "", text)
+    text = _sub_keep_lines(r"\\label\{[^}]+\}", "", text, inline=True)
 
     # Remove other common commands
     text = re.sub(r"\\(newpage|clearpage|pagebreak)", "", text)
     text = re.sub(r"\\(small|large|Large|LARGE|huge|Huge)", "", text)
 
     # Remove remaining commands with braces
-    text = _sub_keep_lines(r"\\[a-zA-Z]+\{[^}]*\}", "", text)
+    text = _sub_keep_lines(r"\\[a-zA-Z]+\{[^}]*\}", "", text, inline=True)
 
     # Remove remaining simple commands
     text = re.sub(r"\\[a-zA-Z]+", "", text)

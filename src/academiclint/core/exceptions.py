@@ -8,6 +8,7 @@ Exception Hierarchy:
     ├── ParsingError - Document parsing failed
     ├── PipelineError - NLP pipeline errors
     │   ├── ModelNotFoundError - spaCy model not installed
+    │   ├── ModelLoadError - spaCy or a model failed to load
     │   └── ProcessingError - Error during NLP processing
     ├── DetectorError - Error in detector module
     └── FormatterError - Error formatting output
@@ -108,6 +109,15 @@ class ModelNotFoundError(PipelineError):
         super().__init__(message, details)
 
 
+class ModelLoadError(PipelineError):
+    """Raised when spaCy or an installed model fails to load."""
+
+    def __init__(self, message: str, original_error: Exception | None = None):
+        self.original_error = original_error
+        details = str(original_error) if original_error else None
+        super().__init__(message, details)
+
+
 class ProcessingError(PipelineError):
     """Raised when NLP processing fails.
 
@@ -157,6 +167,7 @@ __all__ = [
     "DetectorError",
     "EmptyTextError",
     "FormatterError",
+    "ModelLoadError",
     "ModelNotFoundError",
     "ParsingError",
     "PipelineError",

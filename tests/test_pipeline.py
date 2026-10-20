@@ -4,7 +4,7 @@ import pytest
 import spacy
 
 from academiclint import Linter
-from academiclint.core.exceptions import ModelNotFoundError
+from academiclint.core.exceptions import ModelLoadError, ModelNotFoundError, ProcessingError
 from academiclint.core.pipeline import DEFAULT_MODEL, NLPPipeline
 from academiclint.core.result import FlagType
 
@@ -46,6 +46,18 @@ class TestModelLoading:
         with pytest.raises(ModelNotFoundError) as exc_info:
             NLPPipeline()._ensure_loaded()
         assert exc_info.value.model_name == DEFAULT_MODEL
+
+    def test_broken_model_raises_model_load_error(self, monkeypatch):
+        """A model that is installed but fails to load is not a ProcessingError."""
+
+        def broken_load(name, *args, **kwargs):
+            raise RuntimeError("corrupt model")
+
+        monkeypatch.setattr(spacy, "load", broken_load)
+
+        with pytest.raises(ModelLoadError) as exc_info:
+            NLPPipeline()._ensure_loaded()
+        assert not isinstance(exc_info.value, ProcessingError)
 
     def test_explicit_model_does_not_fall_back(self, monkeypatch):
         """A model requested by name must be that model, not a substitute."""

@@ -69,7 +69,7 @@ class Linter:
 
         Raises:
             ModelNotFoundError: If spaCy model is not installed
-            ProcessingError: If pipeline fails to initialize
+            ModelLoadError: If spaCy or the model fails to load
         """
         if self._nlp is None:
             from academiclint.core.pipeline import NLPPipeline

@@ -93,6 +93,9 @@ class Config:
                 f"Invalid level {self.level!r}. Valid options: {', '.join(sorted(VALID_LEVELS))}"
             )
 
+        # domain is a built-in name or a path to a domain file
+        if isinstance(self.domain, os.PathLike):
+            self.domain = os.fspath(self.domain)
         if self.domain is not None and not isinstance(self.domain, str):
             raise ConfigurationError(f"domain must be a string, got {type(self.domain).__name__}")
 

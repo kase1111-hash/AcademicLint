@@ -33,7 +33,8 @@ class JargonDetector(Detector):
             if len(tokens) == 1:
                 domain_terms.add(tokens[0])
             elif len(tokens) > 1:
-                phrase = r"\W+".join(map(re.escape, tokens))
+                # Words may be joined by spaces or a hyphen, not other punctuation
+                phrase = r"(?:\s+|[-\u2010\u2011]\s*)".join(map(re.escape, tokens))
                 phrase_patterns.append(re.compile(rf"\b{phrase}\b", re.IGNORECASE))
 
         for sentence in doc.sentences:
