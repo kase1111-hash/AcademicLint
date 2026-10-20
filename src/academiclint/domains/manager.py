@@ -71,17 +71,26 @@ class DomainManager:
 
         return domains
 
-    def get_terms(self, domain_name: str | None) -> set[str]:
-        """Get all technical terms for a domain.
+    def get_terms(self, domain_name: str | None, _seen: frozenset[str] = frozenset()) -> set[str]:
+        """Get all technical terms for a domain, including its parent's.
 
         Args:
-            domain_name: Name of the domain
+            domain_name: Name of the domain (built-in name or file path)
 
         Returns:
             Set of technical terms
+
+        Raises:
+            ValueError: If the domain's parent chain loops back on itself
         """
         if not domain_name:
             return set()
+        is_builtin = domain_name in self.BUILTIN_DOMAINS
+        if not is_builtin:
+            # Resolve file paths so a file is recognised however it is named
+            domain_name = str(Path(domain_name).resolve())
+        if domain_name in _seen:
+            raise ValueError(f"Domain '{domain_name}' inherits from itself")
 
         domain = self.get_domain(domain_name)
         terms = set(domain.get("technical_terms", []))
@@ -89,6 +98,9 @@ class DomainManager:
         # Include parent terms
         parent = domain.get("parent")
         if parent:
-            terms.update(self.get_terms(parent))
+            if not is_builtin and parent not in self.BUILTIN_DOMAINS:
+                # A file's parent path is relative to that file, like an include
+                parent = str(Path(domain_name).parent / parent)
+            terms.update(self.get_terms(parent, _seen | {domain_name}))
 
         return terms

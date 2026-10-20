@@ -101,27 +101,6 @@ DEFAULT_MODEL = "en_core_web_lg"
 # word vectors), so a lighter install is still usable.
 FALLBACK_MODELS = ("en_core_web_lg", "en_core_web_md", "en_core_web_sm")
 
-PARAGRAPH_COMPONENT = "academiclint_paragraph_boundaries"
-
-
-def _mark_paragraph_starts(doc: Any) -> Any:
-    """spaCy component: start a new sentence after every blank line.
-
-    Without this, the parser happily runs a sentence across a paragraph break
-    (e.g. a Markdown heading followed by body text), which makes sentences
-    straddle paragraphs. Must run before the parser, which respects preset
-    boundaries.
-    """
-    text = doc.text  # Doc.text is rebuilt on every access; read it once
-    prev_end = None
-    for token in doc:
-        if token.is_space:
-            continue
-        if prev_end is not None and "\n\n" in text[prev_end : token.idx]:
-            token.is_sent_start = True
-        prev_end = token.idx + len(token.text)
-    return doc
-
 
 class NLPPipeline:
     """Core NLP processing pipeline."""
@@ -152,12 +131,8 @@ class NLPPipeline:
 
         try:
             import spacy
-            from spacy.language import Language
         except Exception as e:
             raise ProcessingError("Failed to import spaCy", original_error=e) from e
-
-        if not Language.has_factory(PARAGRAPH_COMPONENT):
-            Language.component(PARAGRAPH_COMPONENT, func=_mark_paragraph_starts)
 
         for candidate in self._candidates:
             logger.info("Loading spaCy model: %s", candidate)
@@ -172,11 +147,6 @@ class NLPPipeline:
                     f"Failed to load spaCy model '{candidate}'",
                     original_error=e,
                 ) from e
-
-            if "parser" in self._nlp.pipe_names:
-                self._nlp.add_pipe(PARAGRAPH_COMPONENT, before="parser")
-            else:
-                self._nlp.add_pipe(PARAGRAPH_COMPONENT, first=True)
 
             if candidate != self.model_name:
                 logger.warning(
@@ -229,15 +199,16 @@ class NLPPipeline:
                 for token in doc
             ]
 
-            # Extract sentences
-            sentences = []
-            for sent in doc.sents:
-                sentence = self._build_sentence(sent)
-                if sentence is not None:
-                    sentences.append(sentence)
+            # Extract sentences, paired with their spaCy spans
+            sentence_spans = [
+                (sentence, span)
+                for span in self._sentence_spans(doc)
+                if (sentence := self._build_sentence(span)) is not None
+            ]
+            sentences = [sentence for sentence, _ in sentence_spans]
 
             # Extract paragraphs (split by double newlines)
-            paragraphs = self._extract_paragraphs(text, doc)
+            paragraphs = self._extract_paragraphs(text, sentence_spans)
 
             # Extract entities
             entities = [
@@ -292,6 +263,32 @@ class NLPPipeline:
             raise ProcessingError("Failed to extract document features", original_error=e) from e
 
     @staticmethod
+    def _sentence_spans(doc: Any) -> list[Any]:
+        """Return the doc's sentence spans, split wherever one crosses a blank line.
+
+        The parser can run a sentence across a paragraph break (e.g. a Markdown
+        heading into the body text below it). Splitting after parsing keeps the
+        parser's own boundaries inside each paragraph; presetting boundaries
+        before the parser instead makes the small English model mis-split the
+        body sentence ("Johnson (2019) found..." -> "Johnson", "(", ...).
+        """
+        spans = []
+        for sent in doc.sents:
+            sent_text = sent.text  # Span.text is rebuilt on every access
+            start = sent.start
+            prev_end = None  # End of the previous non-space token, relative to sent
+            for token in sent:
+                if token.is_space:
+                    continue
+                offset = token.idx - sent.start_char
+                if prev_end is not None and "\n\n" in sent_text[prev_end:offset]:
+                    spans.append(doc[start : token.i])
+                    start = token.i
+                prev_end = offset + len(token.text)
+            spans.append(doc[start : sent.end])
+        return spans
+
+    @staticmethod
     def _build_sentence(sent: Any) -> Sentence | None:
         """Convert a spaCy sentence span into a Sentence.
 
@@ -323,7 +320,9 @@ class NLPPipeline:
             tokens=tokens,
         )
 
-    def _extract_paragraphs(self, text: str, doc: Any) -> list[Paragraph]:
+    def _extract_paragraphs(
+        self, text: str, sentence_spans: list[tuple[Sentence, Any]]
+    ) -> list[Paragraph]:
         """Extract paragraphs from text.
 
         This method reuses the already-processed spaCy doc to avoid
@@ -331,7 +330,7 @@ class NLPPipeline:
 
         Args:
             text: Original text
-            doc: spaCy Doc object
+            sentence_spans: Sentences paired with their spaCy spans
 
         Returns:
             List of Paragraph objects
@@ -342,13 +341,6 @@ class NLPPipeline:
         try:
             paragraphs = []
             para_texts = text.split("\n\n")
-
-            # Pre-extract all sentences from the main doc with their spans
-            doc_sentences = [
-                (sentence, sent)
-                for sent in doc.sents
-                if (sentence := self._build_sentence(sent)) is not None
-            ]
 
             current_pos = 0
             for raw_para in para_texts:
@@ -368,7 +360,7 @@ class NLPPipeline:
                 para_sentences = []
                 word_count = 0
 
-                for sentence, sent in doc_sentences:
+                for sentence, sent in sentence_spans:
                     if start <= sentence.span.start < end:
                         para_sentences.append(sentence)
                         # Count words in this sentence (non-punctuation, non-space)

@@ -3,7 +3,7 @@
 import re
 from pathlib import Path
 
-from academiclint.core.exceptions import ValidationError
+from academiclint.core.exceptions import EmptyTextError, ValidationError
 
 # Maximum text length to prevent memory issues
 MAX_TEXT_LENGTH = 10_000_000  # 10 million characters
@@ -33,7 +33,7 @@ def validate_text(text: str, max_length: int = MAX_TEXT_LENGTH) -> str:
         raise ValidationError(f"Text must be a string, got {type(text).__name__}")
 
     if len(text) == 0:
-        raise ValidationError("Text cannot be empty")
+        raise EmptyTextError("Text cannot be empty")
 
     if len(text) > max_length:
         raise ValidationError(
@@ -48,7 +48,7 @@ def validate_text(text: str, max_length: int = MAX_TEXT_LENGTH) -> str:
     text = text.replace("\x00", "")
 
     if not text.strip():
-        raise ValidationError("Text cannot be empty or whitespace only")
+        raise EmptyTextError("Text cannot be empty or whitespace only")
 
     return text
 

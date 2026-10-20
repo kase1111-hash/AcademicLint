@@ -532,6 +532,21 @@ class TestPreviouslyFixedBugs:
         assert not [f for f in with_domain.flags if f.type == FlagType.JARGON_DENSE]
         assert config.domain_terms == []
 
+    def test_bug_multi_word_domain_terms_ignored(self):
+        """
+        Bug: Jargon was checked word by word, so multi-word domain terms such
+        as "machine learning" never exempted anything.
+        Expected: Words covered by a multi-word domain term are not jargon.
+        """
+        text = "Neural network training with machine learning requires memory allocation."
+        config = Config(domain_terms=["neural network", "machine learning", "memory allocation"])
+
+        plain = Linter().check(text)
+        with_terms = Linter(config).check(text)
+
+        assert [f for f in plain.flags if f.type == FlagType.JARGON_DENSE]
+        assert not [f for f in with_terms.flags if f.type == FlagType.JARGON_DENSE]
+
     def test_bug_unknown_domain_silently_ignored(self):
         """
         Bug: An unknown domain name was accepted without any error.
@@ -612,7 +627,9 @@ class TestFileHandlingRegression:
 
     def test_empty_file(self):
         """Empty files should raise appropriate error."""
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", suffix=".txt", delete=False
+        ) as f:
             f.write("")
             f.flush()
 
@@ -621,7 +638,9 @@ class TestFileHandlingRegression:
 
     def test_file_only_whitespace(self):
         """Files with only whitespace should raise error."""
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", suffix=".txt", delete=False
+        ) as f:
             f.write("   \n\n\t\t   ")
             f.flush()
 

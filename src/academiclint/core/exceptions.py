@@ -4,6 +4,7 @@ Exception Hierarchy:
     AcademicLintError (base)
     ├── ConfigurationError - Invalid configuration
     ├── ValidationError - Input validation failed
+    │   └── EmptyTextError - No text to analyze
     ├── ParsingError - Document parsing failed
     ├── PipelineError - NLP pipeline errors
     │   ├── ModelNotFoundError - spaCy model not installed
@@ -58,6 +59,12 @@ class ValidationError(AcademicLintError):
         - File path is invalid
         - Unsupported file extension
     """
+
+    pass
+
+
+class EmptyTextError(ValidationError):
+    """Raised when there is no text to analyze (empty or whitespace only)."""
 
     pass
 
@@ -148,6 +155,7 @@ __all__ = [
     "AcademicLintError",
     "ConfigurationError",
     "DetectorError",
+    "EmptyTextError",
     "FormatterError",
     "ModelNotFoundError",
     "ParsingError",

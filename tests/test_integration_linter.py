@@ -260,7 +260,9 @@ class TestLinterFileIntegration:
 
     def test_check_markdown_file(self, linter):
         """Test analyzing a Markdown file."""
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False) as f:
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", suffix=".md", delete=False
+        ) as f:
             f.write("# Test Document\n\n")
             f.write("This is a test paragraph with some content.\n\n")
             f.write("Another paragraph discusses additional topics.\n")
@@ -273,7 +275,9 @@ class TestLinterFileIntegration:
 
     def test_check_txt_file(self, linter):
         """Test analyzing a plain text file."""
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", suffix=".txt", delete=False
+        ) as f:
             f.write("This is a plain text file.\n")
             f.write("It contains multiple sentences.\n")
             f.flush()
@@ -284,7 +288,9 @@ class TestLinterFileIntegration:
 
     def test_check_file_with_path_object(self, linter):
         """Test check_file accepts Path objects."""
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", suffix=".txt", delete=False
+        ) as f:
             f.write("Test content for Path object test.\n")
             f.flush()
 
@@ -300,7 +306,9 @@ class TestLinterFileIntegration:
 
     def test_check_unsupported_extension(self, linter):
         """Test that unsupported extension raises error."""
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".xyz", delete=False) as f:
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", suffix=".xyz", delete=False
+        ) as f:
             f.write("test content")
             f.flush()
 

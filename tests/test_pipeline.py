@@ -3,8 +3,10 @@
 import pytest
 import spacy
 
+from academiclint import Linter
 from academiclint.core.exceptions import ModelNotFoundError
-from academiclint.core.pipeline import DEFAULT_MODEL, PARAGRAPH_COMPONENT, NLPPipeline
+from academiclint.core.pipeline import DEFAULT_MODEL, NLPPipeline
+from academiclint.core.result import FlagType
 
 
 def fake_load(installed):
@@ -53,10 +55,23 @@ class TestModelLoading:
             NLPPipeline("en_core_web_md")._ensure_loaded()
         assert exc_info.value.model_name == "en_core_web_md"
 
-    def test_adds_paragraph_boundary_component(self, monkeypatch):
-        """The loaded model splits sentences at paragraph breaks."""
-        monkeypatch.setattr(spacy, "load", fake_load({"en_core_web_sm"}))
-        pipeline = NLPPipeline()
-        pipeline._ensure_loaded()
 
-        assert PARAGRAPH_COMPONENT in pipeline._nlp.pipe_names
+class TestSentenceSplitting:
+    """Tests for sentence boundaries at paragraph breaks (uses the installed model)."""
+
+    HEADED = "Methods\n\nJohnson (2019) found that sleep deprivation causes memory loss."
+
+    def test_heading_split_from_body_sentence(self):
+        """A heading becomes its own sentence and the body sentence stays whole."""
+        doc = NLPPipeline().process(self.HEADED)
+
+        assert [s.text for s in doc.sentences] == [
+            "Methods",
+            "Johnson (2019) found that sleep deprivation causes memory loss.",
+        ]
+
+    def test_citation_stays_with_its_claim(self):
+        """Splitting the body sentence would detach the citation from its claim."""
+        result = Linter().check(self.HEADED)
+
+        assert not [f for f in result.flags if f.type == FlagType.UNSUPPORTED_CAUSAL]

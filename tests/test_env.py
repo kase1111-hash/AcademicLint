@@ -25,7 +25,9 @@ class TestLoadEnv:
 
     def test_load_existing_env_file(self):
         """Test loading an existing .env file."""
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".env", delete=False) as f:
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", suffix=".env", delete=False
+        ) as f:
             f.write("TEST_VAR=test_value\n")
             f.write("ANOTHER_VAR=another\n")
             f.flush()
@@ -50,7 +52,9 @@ class TestLoadEnv:
 
     def test_does_not_override_by_default(self):
         """Test that existing env vars are not overridden by default."""
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".env", delete=False) as f:
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", suffix=".env", delete=False
+        ) as f:
             f.write("TEST_OVERRIDE=new_value\n")
             f.flush()
 
@@ -63,7 +67,9 @@ class TestLoadEnv:
 
     def test_override_when_requested(self):
         """Test that env vars are overridden when override=True."""
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".env", delete=False) as f:
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", suffix=".env", delete=False
+        ) as f:
             f.write("TEST_OVERRIDE2=new_value\n")
             f.flush()
 
@@ -76,7 +82,9 @@ class TestLoadEnv:
 
     def test_handles_quoted_values(self):
         """Test that quoted values are unquoted."""
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".env", delete=False) as f:
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", suffix=".env", delete=False
+        ) as f:
             f.write('DOUBLE_QUOTED="double quoted value"\n')
             f.write("SINGLE_QUOTED='single quoted value'\n")
             f.flush()
@@ -94,7 +102,9 @@ class TestLoadEnv:
 
     def test_skips_comments(self):
         """Test that comment lines are skipped."""
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".env", delete=False) as f:
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", suffix=".env", delete=False
+        ) as f:
             f.write("# This is a comment\n")
             f.write("ACTUAL_VAR=value\n")
             f.write("  # Indented comment\n")
@@ -109,7 +119,9 @@ class TestLoadEnv:
 
     def test_skips_empty_lines(self):
         """Test that empty lines are skipped."""
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".env", delete=False) as f:
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", suffix=".env", delete=False
+        ) as f:
             f.write("\n")
             f.write("VAR_AFTER_EMPTY=value\n")
             f.write("\n\n")

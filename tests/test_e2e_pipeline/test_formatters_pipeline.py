@@ -190,7 +190,9 @@ class TestGitHubFormatterPipeline:
         # Create a result from file analysis
         import tempfile
 
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False) as f:
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", suffix=".md", delete=False
+        ) as f:
             f.write(BAD_TEXT_VAGUE)
             f.flush()
 

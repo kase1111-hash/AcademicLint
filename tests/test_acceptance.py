@@ -371,7 +371,9 @@ class TestEndToEndWorkflows:
         the complex dynamics at play here.
         """
 
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False) as f:
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", suffix=".md", delete=False
+        ) as f:
             f.write(paper_content)
             f.flush()
 
@@ -490,7 +492,9 @@ class TestAcceptanceCriteria:
         content = "Test content for file format support."
 
         for ext in [".md", ".txt"]:
-            with tempfile.NamedTemporaryFile(mode="w", suffix=ext, delete=False) as f:
+            with tempfile.NamedTemporaryFile(
+                mode="w", encoding="utf-8", suffix=ext, delete=False
+            ) as f:
                 f.write(content)
                 f.flush()
 

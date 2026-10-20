@@ -23,13 +23,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   file's `output.format`, `output.color` and `fail_under` are now honoured
 - Expected errors (bad input, bad config, missing model) print a one-line
   message and exit with code 1 instead of a traceback
-- `--sections` prints a warning that it is not supported yet
+- Files are checked independently: a file that cannot be analyzed is reported
+  by name and the run continues (exit code 1 at the end); files without text
+  found while expanding a directory are skipped with a warning
+- `--sections` (or `sections:` in a config file) prints a warning that section
+  filtering is not supported yet
+- Markdown and LaTeX parsing keeps every source line, so reported line numbers
+  (e.g. GitHub annotations) match the file
+- A domain file's `parent` path is resolved relative to that file
 
 ### Fixed
 - Text with leading whitespace lost its first sentence: 0 words and density 0.0
   for the first paragraph, and anchored patterns never matched it
 - Sentences ran across blank lines (e.g. a Markdown heading into body text),
   giving the body paragraph 0 words and density 0.0
+- Markdown list markers, block quotes and headings consumed the preceding blank
+  line, merging paragraphs; `.markdown` files were not parsed as Markdown
 - Flags starting in leading whitespace were dropped from `result.flags`
 - Causal and weasel patterns matched across paragraphs (a "Results" heading
   followed by "In ..." was flagged as "results in")
@@ -38,11 +47,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   could be flagged twice
 - Whitespace-only input is rejected with `ValidationError`
 - `--domain` and `--domain-file` were ignored; unknown domains are now an error
-- `--quiet` had no effect; `check -` (stdin) was rejected
+- Multi-word domain terms (e.g. "machine learning") never exempted jargon
+- Malformed config and domain files (non-mapping `output`, unknown output
+  keys, non-UTF-8 text, empty or non-list term lists, a domain that inherits
+  from itself) crashed with a traceback
+- `--quiet` had no effect (terminal and Markdown output); `check -` (stdin) was
+  rejected
 - GitHub output broke on newlines in messages and ignored `--min-density`
 - `setup` ran `python -m spacy download`, which could use a different
   interpreter than academiclint; it now uses the running interpreter
 - Reading stdin used `click.get_text_stream`, removed in Click 9
+- Config, domain and `.env` files and `-o` output used the platform's default
+  encoding instead of UTF-8 (broke on Windows)
 
 ### Removed
 - `safety` dev dependency (unused; `pip-audit` covers dependency scanning)

@@ -29,7 +29,7 @@ def parse_file(path: Path) -> str:
     with path.open("r", encoding="utf-8") as f:
         content = f.read()
 
-    if suffix == ".md":
+    if suffix in (".md", ".markdown"):
         return parse_markdown(content)
     elif suffix == ".txt":
         return content
@@ -40,10 +40,43 @@ def parse_file(path: Path) -> str:
         return content
 
 
+def _sub_keep_lines(pattern: str, repl: str, text: str, flags: int = 0) -> str:
+    """re.sub that keeps the line breaks of each replaced match.
+
+    Flag positions are reported as line numbers in the parsed text, so they
+    only point at the right source line if parsing never adds or drops one.
+    """
+
+    def replace(match: re.Match[str]) -> str:
+        new = match.expand(repl)
+        return new + "\n" * max(match.group(0).count("\n") - new.count("\n"), 0)
+
+    return re.sub(pattern, replace, text, flags=flags)
+
+
+def _blank(match: re.Match[str]) -> str:
+    """Replace a match with spaces, keeping columns on the line unchanged."""
+    return " " * len(match.group(0))
+
+
+def _heading(match: re.Match[str], title: str) -> str:
+    """Return a heading's title, ending it as a sentence if text follows directly.
+
+    A heading on the line right above its text would otherwise run into the
+    first sentence; a period separates them without adding a line.
+    """
+    title = title.strip()
+    next_line = match.string[match.end() :].split("\n", 2)
+    if len(next_line) > 1 and next_line[1].strip() and title and title[-1] not in ".:?!":
+        return title + "."
+    return title
+
+
 def parse_markdown(content: str) -> str:
     """Parse Markdown content and extract text.
 
-    Removes Markdown formatting while preserving text structure.
+    Removes Markdown formatting while preserving text structure. Every line
+    of the input is kept, so line numbers match the source file.
 
     Args:
         content: Raw Markdown content
@@ -54,23 +87,29 @@ def parse_markdown(content: str) -> str:
     text = content
 
     # Remove code blocks
-    text = re.sub(r"```[\s\S]*?```", "", text)
-    text = re.sub(r"`[^`]+`", "", text)
+    text = _sub_keep_lines(r"```[\s\S]*?```", "", text)
+    text = _sub_keep_lines(r"`[^`]+`", "", text)
 
     # Remove images
-    text = re.sub(r"!\[([^\]]*)\]\([^)]+\)", r"\1", text)
+    text = _sub_keep_lines(r"!\[([^\]]*)\]\([^)]+\)", r"\1", text)
 
     # Convert links to just text
-    text = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", text)
+    text = _sub_keep_lines(r"\[([^\]]+)\]\([^)]+\)", r"\1", text)
 
     # Remove HTML tags
-    text = re.sub(r"<[^>]+>", "", text)
+    text = _sub_keep_lines(r"<[^>]+>", "", text)
 
     # Remove horizontal rules
-    text = re.sub(r"^[-*_]{3,}\s*$", "", text, flags=re.MULTILINE)
+    text = re.sub(r"^[-*_]{3,}[ \t]*$", "", text, flags=re.MULTILINE)
 
-    # Remove heading markers but keep text
-    text = re.sub(r"^#{1,6}\s+", "", text, flags=re.MULTILINE)
+    # Remove heading markers but keep text. Line-start markers become spaces
+    # of the same width so columns on those lines still match the source.
+    text = re.sub(
+        r"^(#{1,6}[ \t]+)(.*?)[ \t#]*$",
+        lambda m: " " * len(m.group(1)) + _heading(m, m.group(2)),
+        text,
+        flags=re.MULTILINE,
+    )
 
     # Remove emphasis markers
     text = re.sub(r"\*\*([^*]+)\*\*", r"\1", text)
@@ -78,23 +117,20 @@ def parse_markdown(content: str) -> str:
     text = re.sub(r"__([^_]+)__", r"\1", text)
     text = re.sub(r"_([^_]+)_", r"\1", text)
 
-    # Remove blockquote markers
-    text = re.sub(r"^>\s*", "", text, flags=re.MULTILINE)
+    # Remove blockquote and list markers ([ \t], not \s, so the blank line
+    # before a list stays)
+    text = re.sub(r"^>[ \t]*", _blank, text, flags=re.MULTILINE)
+    text = re.sub(r"^[ \t]*[-*+][ \t]+", _blank, text, flags=re.MULTILINE)
+    text = re.sub(r"^[ \t]*\d+\.[ \t]+", _blank, text, flags=re.MULTILINE)
 
-    # Remove list markers
-    text = re.sub(r"^[\s]*[-*+]\s+", "", text, flags=re.MULTILINE)
-    text = re.sub(r"^[\s]*\d+\.\s+", "", text, flags=re.MULTILINE)
-
-    # Collapse multiple newlines
-    text = re.sub(r"\n{3,}", "\n\n", text)
-
-    return text.strip()
+    return text.rstrip()
 
 
 def parse_latex(content: str) -> str:
     """Parse LaTeX content and extract text.
 
-    Removes LaTeX commands while preserving text content.
+    Removes LaTeX commands while preserving text content. Every line of the
+    input is kept, so line numbers match the source file.
 
     Args:
         content: Raw LaTeX content
@@ -121,16 +157,20 @@ def parse_latex(content: str) -> str:
         text = re.sub(rf"\\end\{{{env}\}}", "", text)
 
     # Remove figure/table environments entirely
-    text = re.sub(r"\\begin\{(figure|table)\}[\s\S]*?\\end\{\1\}", "", text)
+    text = _sub_keep_lines(r"\\begin\{(figure|table)\}[\s\S]*?\\end\{\1\}", "", text)
 
     # Remove equations
-    text = re.sub(r"\$\$[\s\S]*?\$\$", "", text)
-    text = re.sub(r"\$[^$]+\$", "", text)
-    text = re.sub(r"\\begin\{equation\}[\s\S]*?\\end\{equation\}", "", text)
-    text = re.sub(r"\\begin\{align\}[\s\S]*?\\end\{align\}", "", text)
+    text = _sub_keep_lines(r"\$\$[\s\S]*?\$\$", "", text)
+    text = _sub_keep_lines(r"\$[^$]+\$", "", text)
+    text = _sub_keep_lines(r"\\begin\{equation\}[\s\S]*?\\end\{equation\}", "", text)
+    text = _sub_keep_lines(r"\\begin\{align\}[\s\S]*?\\end\{align\}", "", text)
 
     # Convert section commands to text
-    text = re.sub(r"\\(section|subsection|subsubsection|chapter)\*?\{([^}]+)\}", r"\2\n\n", text)
+    text = re.sub(
+        r"\\(section|subsection|subsubsection|chapter)\*?\{([^}\n]+)\}",
+        lambda m: _heading(m, m.group(2)),
+        text,
+    )
 
     # Remove formatting commands but keep content
     text = re.sub(r"\\(textbf|textit|emph|underline)\{([^}]+)\}", r"\2", text)
@@ -149,7 +189,7 @@ def parse_latex(content: str) -> str:
     text = re.sub(r"\\(small|large|Large|LARGE|huge|Huge)", "", text)
 
     # Remove remaining commands with braces
-    text = re.sub(r"\\[a-zA-Z]+\{[^}]*\}", "", text)
+    text = _sub_keep_lines(r"\\[a-zA-Z]+\{[^}]*\}", "", text)
 
     # Remove remaining simple commands
     text = re.sub(r"\\[a-zA-Z]+", "", text)
@@ -157,7 +197,4 @@ def parse_latex(content: str) -> str:
     # Clean up braces
     text = re.sub(r"[{}]", "", text)
 
-    # Collapse multiple newlines
-    text = re.sub(r"\n{3,}", "\n\n", text)
-
-    return text.strip()
+    return text.rstrip()

@@ -51,7 +51,9 @@ domain_terms:
   - epistemology
   - ontology
 """
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".yml", delete=False) as f:
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", suffix=".yml", delete=False
+        ) as f:
             f.write(yaml_content)
             f.flush()
 

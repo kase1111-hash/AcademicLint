@@ -59,6 +59,9 @@ def check(
     files). With no FILES, or with "-", text is read from stdin.
 
     Options given on the command line override values from --config.
+
+    Exit codes: 0 on success; 1 if any input could not be analyzed; 2 if a
+    document's density is below --fail-under (or the command line is invalid).
     """
     from academiclint.cli.check import run_check
 

@@ -3,12 +3,21 @@
 import dataclasses
 import sys
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import click
 
-from academiclint.core.exceptions import AcademicLintError, ValidationError
+from academiclint.core.exceptions import (
+    AcademicLintError,
+    EmptyTextError,
+    ParsingError,
+    ValidationError,
+)
 from academiclint.utils.validation import SUPPORTED_EXTENSIONS
+
+if TYPE_CHECKING:
+    from academiclint import Linter
+    from academiclint.core.result import AnalysisResult
 
 # Exit codes
 EXIT_ERROR = 1  # Analysis could not run (bad input, config, or missing model)
@@ -46,6 +55,8 @@ def run_check(
             quiet=quiet,
             output_path=output_path,
         )
+    except BrokenPipeError:
+        raise  # Output piped into e.g. `head`; click exits quietly
     except (AcademicLintError, OSError) as e:
         click.echo(f"Error: {e}", err=True)
         sys.exit(EXIT_ERROR)
@@ -84,8 +95,11 @@ def _run_check(
         config, **{name: value for name, value in overrides.items() if value is not None}
     )
 
-    if sections:
-        click.echo("Warning: --sections is not supported yet; analyzing whole documents", err=True)
+    if sections or config.sections:
+        click.echo(
+            "Warning: section filtering is not supported yet; analyzing whole documents",
+            err=True,
+        )
 
     # Initialize linter
     linter = Linter(config)
@@ -98,32 +112,73 @@ def _run_check(
         min_density=config.min_density,
     )
 
+    if "-" in files and len(files) > 1:
+        raise click.UsageError("'-' (stdin) cannot be combined with other paths")
+
     # Process files or stdin
+    failed = 0
     if not files or files == ("-",):
         # Read from stdin
         result = linter.check(sys.stdin.read())
         output_text = formatter.format(result)
         densities = [result.density]
     else:
-        # Process files
-        results = {path: linter.check_file(path) for path in _expand_paths(files)}
+        results, failed = _check_files(linter, files)
         output_text = formatter.format_multiple(results)
         densities = [r.density for r in results.values()]
 
     # Output
     if output_path:
-        Path(output_path).write_text(output_text)
+        Path(output_path).write_text(output_text, encoding="utf-8")
         click.echo(f"Output written to {output_path}")
     else:
         click.echo(output_text)
+
+    if failed:
+        sys.exit(EXIT_ERROR)
 
     # Exit code based on fail_under
     if config.fail_under is not None and min(densities) < config.fail_under:
         sys.exit(EXIT_BELOW_THRESHOLD)
 
 
-def _expand_paths(files: tuple) -> list[Path]:
+def _check_files(linter: "Linter", files: tuple) -> tuple[dict[Path, "AnalysisResult"], int]:
+    """Analyze each file, reporting failures without stopping the rest.
+
+    Returns:
+        Results for the files analyzed, and the number of files that failed
+
+    Raises:
+        EmptyTextError: If every file was skipped for having no text
+    """
+    results = {}
+    failed = 0
+    for path, from_directory in _expand_paths(files):
+        try:
+            results[path] = linter.check_file(path)
+        except EmptyTextError as e:
+            if from_directory:
+                # e.g. a LaTeX main file holding only \input commands
+                click.echo(f"Warning: skipping {path}: {e}", err=True)
+            else:
+                click.echo(f"Error: {path}: {e}", err=True)
+                failed += 1
+        except (ValidationError, ParsingError, OSError) as e:
+            click.echo(f"Error: {path}: {e}", err=True)
+            failed += 1
+
+    if not results:
+        if failed:
+            sys.exit(EXIT_ERROR)
+        raise EmptyTextError("None of the files contain text to analyze")
+    return results, failed
+
+
+def _expand_paths(files: tuple) -> list[tuple[Path, bool]]:
     """Expand directories into the supported files they contain.
+
+    Returns:
+        (path, came_from_a_directory) pairs
 
     Raises:
         ValidationError: If a directory contains no supported files
@@ -132,7 +187,7 @@ def _expand_paths(files: tuple) -> list[Path]:
     for name in files:
         path = Path(name)
         if not path.is_dir():
-            paths.append(path)
+            paths.append((path, False))
             continue
 
         found = sorted(
@@ -148,5 +203,5 @@ def _expand_paths(files: tuple) -> list[Path]:
                 f"No supported files in directory '{path}' "
                 f"(looked for {', '.join(sorted(SUPPORTED_EXTENSIONS))})"
             )
-        paths.extend(found)
+        paths.extend((p, True) for p in found)
     return paths

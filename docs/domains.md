@@ -84,7 +84,7 @@ medicine
     └── cognitive-science (custom)
 ```
 
-When using `parent: philosophy`, your domain inherits all terms from the philosophy domain.
+When using `parent: philosophy`, your domain inherits all terms from the philosophy domain. A parent can also be another domain file; a relative path is resolved from the directory of the file that names it.
 
 ## Inline Domain Terms
 

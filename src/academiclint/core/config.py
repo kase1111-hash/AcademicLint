@@ -128,10 +128,12 @@ class Config:
             raise FileNotFoundError(f"Configuration file not found: {path}")
 
         try:
-            with path.open() as f:
+            with path.open(encoding="utf-8") as f:
                 data = yaml.safe_load(f) or {}
         except yaml.YAMLError as e:
             raise ConfigurationError(f"Invalid YAML in configuration file: {e}") from e
+        except UnicodeDecodeError as e:
+            raise ConfigurationError(f"Configuration file is not valid UTF-8: {e}") from e
 
         if not isinstance(data, dict):
             raise ConfigurationError(
@@ -142,8 +144,16 @@ class Config:
             data.update(overrides)
 
         # Handle nested output config
-        output_data = data.pop("output", {})
-        output_config = OutputConfig(**output_data) if output_data else OutputConfig()
+        output_data = data.pop("output", None) or {}
+        if not isinstance(output_data, dict):
+            raise ConfigurationError(
+                f"'output' must be a YAML mapping, got {type(output_data).__name__}"
+            )
+
+        try:
+            output_config = OutputConfig(**output_data)
+        except TypeError as e:
+            raise ConfigurationError(f"Unknown output option: {e}") from e
 
         try:
             return cls(output=output_config, **data)

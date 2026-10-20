@@ -25,13 +25,25 @@ class JargonDetector(Detector):
         # Build set of acceptable domain terms
         domain_terms = {t.lower() for t in config.domain_terms}
 
+        # Multi-word domain terms (e.g. "machine learning") are matched as
+        # phrases; the words they cover are not counted as jargon
+        phrase_patterns = [
+            re.compile(r"\b" + r"\s+".join(map(re.escape, term.split())) + r"\b", re.IGNORECASE)
+            for term in domain_terms
+            if len(term.split()) > 1
+        ]
+
         for sentence in doc.sentences:
             jargon_terms = []
-            words = re.findall(r"\b\w+\b", sentence.text)
+            covered = [m.span() for p in phrase_patterns for m in p.finditer(sentence.text)]
+            word_matches = list(re.finditer(r"\b\w+\b", sentence.text))
+            words = [m.group() for m in word_matches]
 
-            for word in words:
-                if self._is_jargon(word, domain_terms):
-                    jargon_terms.append(word)
+            for match in word_matches:
+                if any(start <= match.start() < end for start, end in covered):
+                    continue
+                if self._is_jargon(match.group(), domain_terms):
+                    jargon_terms.append(match.group())
 
             if len(words) > 0:
                 jargon_ratio = len(jargon_terms) / len(words)
