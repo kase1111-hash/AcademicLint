@@ -45,6 +45,16 @@ class TestLoadEnv:
             os.environ.pop("TEST_VAR", None)
             os.environ.pop("ANOTHER_VAR", None)
 
+    def test_byte_order_mark_ignored(self, tmp_path):
+        """A BOM written by some Windows editors must not hide the first variable."""
+        env_file = tmp_path / ".env"
+        env_file.write_bytes(b"\xef\xbb\xbfTEST_BOM_VAR=value\n")
+        os.environ.pop("TEST_BOM_VAR", None)
+
+        load_env(env_file)
+
+        assert os.environ.pop("TEST_BOM_VAR", None) == "value"
+
     def test_load_nonexistent_file_returns_false(self):
         """Test loading nonexistent file returns False."""
         result = load_env("/nonexistent/.env")

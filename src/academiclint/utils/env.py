@@ -89,7 +89,7 @@ def _find_env_file() -> Path | None:
 
 def _load_env_file(path: Path, override: bool) -> None:
     """Parse and load a .env file."""
-    with path.open(encoding="utf-8") as f:
+    with path.open(encoding="utf-8-sig") as f:  # -sig: tolerate a byte-order mark
         for line_num, raw_line in enumerate(f, 1):
             line = raw_line.strip()
 

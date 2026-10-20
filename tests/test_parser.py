@@ -1,6 +1,12 @@
 """Tests for Markdown and LaTeX text extraction."""
 
-from academiclint.core.parser import parse_file, parse_latex, parse_markdown
+from academiclint.core.parser import (
+    latex_to_text,
+    markdown_to_text,
+    parse_file,
+    parse_latex,
+    parse_markdown,
+)
 
 MARKDOWN = """# Intro
 
@@ -26,9 +32,10 @@ Freedom is being free.
 \begin{figure}
 \caption{A figure}
 \end{figure}
-\subsection{Done.}
+\subsection[Short]{Done.}
 
-Text with $x
+Prior work \cite{smith2019,
+  jones2020} is cited. Text with $x
 + y$ math.
 """
 
@@ -37,20 +44,36 @@ def line_of(text: str, needle: str) -> int:
     return text[: text.index(needle)].count("\n") + 1
 
 
-class TestLinePreservation:
-    """Parsed text keeps every source line, so flag line numbers match the file."""
+class TestSourceLines:
+    """Lines of the extracted text map back to the right source lines."""
 
-    def test_markdown_keeps_line_numbers(self):
-        parsed = parse_markdown(MARKDOWN)
+    def test_markdown_lines_map_to_source(self):
+        parsed = markdown_to_text(MARKDOWN)
 
         for needle in ("many experts", "We did things", "Para one", "item two"):
-            assert line_of(parsed, needle) == line_of(MARKDOWN, needle)
+            assert parsed.source_line(line_of(parsed.text, needle)) == line_of(MARKDOWN, needle)
 
-    def test_latex_keeps_line_numbers(self):
-        parsed = parse_latex(LATEX)
+    def test_latex_lines_map_to_source(self):
+        parsed = latex_to_text(LATEX)
 
-        for needle in ("Freedom is being free", "math."):
-            assert line_of(parsed, needle) == line_of(LATEX, needle)
+        for needle in ("Freedom is being free", "is cited", "math."):
+            assert parsed.source_line(line_of(parsed.text, needle)) == line_of(LATEX, needle)
+
+    def test_flag_lines_reported_against_source(self, tmp_path):
+        """check_file reports the source line, not the line in the extracted text."""
+        from academiclint import FlagType, Linter
+
+        path = tmp_path / "paper.tex"
+        path.write_text(
+            "\\section{Intro}\nWe begin here.\n\nPrior work \\cite{a,\n  b} is cited.\n\n"
+            "Many experts agree that this is true.\n",
+            encoding="utf-8",
+        )
+
+        result = Linter().check_file(path)
+
+        weasel = [f for f in result.flags if f.type == FlagType.WEASEL]
+        assert [f.line for f in weasel] == [7]
 
     def test_markdown_line_markers_keep_columns(self):
         parsed = parse_markdown("- many experts\n> some scholars\n## Heading here\n")
@@ -67,13 +90,23 @@ class TestStructure:
 
         assert "Para one.\n\n" in parsed
 
-    def test_heading_directly_above_text_ends_as_sentence(self):
-        assert parse_markdown("## Methods\nWe did things.").split("\n")[0].strip() == "Methods."
-        assert parse_latex("\\section{Methods}\nWe did things.").startswith("Methods.\n")
+    def test_heading_directly_above_text_gets_its_own_paragraph(self):
+        assert parse_markdown("## Methods\nWe did things.") == "   Methods\n\nWe did things."
+        assert parse_latex("\\section{Experiment A}\nWe did things.") == (
+            "Experiment A\n\nWe did things."
+        )
+
+    def test_heading_with_text_on_the_same_line(self):
+        assert parse_latex("\\section{Results} We found things.") == "Results\n\nWe found things."
 
     def test_heading_followed_by_blank_line_unchanged(self):
-        assert parse_markdown("## Methods\n\nWe did things.").split("\n")[0].strip() == "Methods"
-        assert parse_latex("\\section{Done.}\nText.").startswith("Done.\n")
+        assert parse_markdown("## Methods\n\nWe did things.") == "   Methods\n\nWe did things."
+
+    def test_markdown_closing_hashes(self):
+        """Only a run of #'s after a space closes a heading, so "C#" keeps its '#'."""
+        assert parse_markdown("## Why C#") == "   Why C#"
+        assert parse_markdown("# foo#") == "  foo#"
+        assert parse_markdown("# foo ##") == "  foo"
 
     def test_markdown_extension_parsed_as_markdown(self, tmp_path):
         path = tmp_path / "notes.markdown"

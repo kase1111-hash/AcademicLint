@@ -28,8 +28,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   found while expanding a directory are skipped with a warning
 - `--sections` (or `sections:` in a config file) prints a warning that section
   filtering is not supported yet
-- Markdown and LaTeX parsing keeps every source line, so reported line numbers
-  (e.g. GitHub annotations) match the file
+- Reported line numbers for Markdown and LaTeX files (e.g. GitHub annotations)
+  refer to the source file rather than the extracted text
+- A heading directly followed by text is analyzed as a paragraph of its own
 - A domain file's `parent` path is resolved relative to that file
 
 ### Fixed
@@ -47,18 +48,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   could be flagged twice
 - Whitespace-only input is rejected with `ValidationError`
 - `--domain` and `--domain-file` were ignored; unknown domains are now an error
-- Multi-word domain terms (e.g. "machine learning") never exempted jargon
+- Multi-word and hyphenated domain terms (e.g. "machine learning",
+  "cross-validation") never exempted jargon
+- `--domain-file philosophy` read the built-in domain instead of the file
 - Malformed config and domain files (non-mapping `output`, unknown output
-  keys, non-UTF-8 text, empty or non-list term lists, a domain that inherits
-  from itself) crashed with a traceback
+  keys, values of the wrong type, non-UTF-8 text, empty or non-list term
+  lists, a domain that inherits from itself) crashed with a traceback
+- Non-UTF-8 stdin crashed with a traceback; so did text longer than spaCy
+  accepts, which also stopped the remaining files
+- A Markdown heading ending in '#' lost it ("C#" became "C")
 - `--quiet` had no effect (terminal and Markdown output); `check -` (stdin) was
   rejected
 - GitHub output broke on newlines in messages and ignored `--min-density`
 - `setup` ran `python -m spacy download`, which could use a different
   interpreter than academiclint; it now uses the running interpreter
 - Reading stdin used `click.get_text_stream`, removed in Click 9
-- Config, domain and `.env` files and `-o` output used the platform's default
-  encoding instead of UTF-8 (broke on Windows)
+- Config, domain and `.env` files, `-o` output and redirected stdout used the
+  platform's default encoding instead of UTF-8 (broke on Windows); a `.env`
+  file starting with a byte-order mark lost its first variable
 
 ### Removed
 - `safety` dev dependency (unused; `pip-audit` covers dependency scanning)

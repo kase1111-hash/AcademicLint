@@ -1,6 +1,10 @@
 """Tests for the `academiclint check` command line."""
 
 import json
+import os
+import subprocess
+import sys
+from pathlib import Path
 
 import pytest
 from click.testing import CliRunner
@@ -38,6 +42,13 @@ class TestInput:
 
         assert result.exit_code == 0, result.output
         assert json.loads(result.stdout)["summary"]["flag_count"] > 0
+
+    def test_stdin_must_be_utf8(self, runner):
+        result = runner.invoke(cli, ["check", "-"], input=b"Many experts \xe9 believe this.")
+
+        assert result.exit_code == EXIT_ERROR
+        assert "stdin is not valid UTF-8" in result.output
+        assert "Traceback" not in result.output
 
     def test_directory_expands_to_supported_files(self, runner, tmp_path):
         (tmp_path / "sub").mkdir()
@@ -88,6 +99,36 @@ class TestInput:
 
         assert result.exit_code == EXIT_ERROR
         assert f"Error: {blank}:" in result.output
+        assert [r["file"] for r in json.loads(result.stdout)] == [str(vague_file)]
+
+    def test_unreadable_entry_does_not_stop_directory_run(self, runner, tmp_path, monkeypatch):
+        """An entry that can't be stat'ed (e.g. in a non-searchable dir) is skipped."""
+        (tmp_path / "a.md").write_text(VAGUE_TEXT)
+        locked = tmp_path / "b.md"
+        locked.write_text(VAGUE_TEXT)
+        is_file = Path.is_file
+
+        def fake_is_file(self):
+            if self == locked:
+                raise PermissionError(13, "Permission denied", str(self))
+            return is_file(self)
+
+        monkeypatch.setattr(Path, "is_file", fake_is_file)
+
+        result = runner.invoke(cli, ["check", str(tmp_path), "--format", "json"])
+
+        assert result.exit_code == 0, result.output
+        assert f"skipping {locked}" in result.output
+        assert [r["file"] for r in json.loads(result.stdout)] == [str(tmp_path / "a.md")]
+
+    def test_text_too_long_for_spacy_does_not_stop_the_others(self, runner, vague_file, tmp_path):
+        huge = tmp_path / "huge.txt"
+        huge.write_text("word " * 220_000)  # Over spaCy's 1,000,000-character limit
+
+        result = runner.invoke(cli, ["check", str(vague_file), str(huge), "--format", "json"])
+
+        assert result.exit_code == EXIT_ERROR
+        assert f"Error: {huge}:" in result.output
         assert [r["file"] for r in json.loads(result.stdout)] == [str(vague_file)]
 
     def test_dash_with_other_paths_is_usage_error(self, runner, vague_file):
@@ -179,6 +220,9 @@ class TestErrors:
             (b"output: json\n", "'output' must be a YAML mapping"),
             (b"output:\n  colour: false\n", "Unknown output option"),
             (b"level: strict\n\xe9\n", "not valid UTF-8"),
+            (b"level: [1]\n", "Invalid level [1]"),
+            (b"output:\n  format: [1]\n", "Invalid output format [1]"),
+            (b"domain: 5\n", "domain must be a string"),
         ],
     )
     def test_bad_config_file(self, runner, vague_file, tmp_path, content, message):
@@ -208,6 +252,24 @@ class TestErrors:
 
         assert result.exit_code == EXIT_ERROR
         assert message in result.output
+
+    def test_domain_file_named_like_builtin_domain(self, runner, tmp_path, monkeypatch):
+        """--domain-file philosophy reads ./philosophy, not the built-in domain."""
+        monkeypatch.chdir(tmp_path)
+        # Terms the built-in philosophy domain doesn't have
+        Path("philosophy").write_text(
+            "technical_terms: [neural network, training, machine learning, memory allocation]\n"
+        )
+        Path("p.md").write_text(
+            "Neural network training with machine learning requires memory allocation."
+        )
+        args = ["check", "p.md", "--format", "github"]
+
+        plain = runner.invoke(cli, args)
+        with_file = runner.invoke(cli, [*args, "--domain-file", "philosophy"])
+
+        assert "JARGON_DENSE" in plain.stdout
+        assert "JARGON_DENSE" not in with_file.stdout
 
     def test_domain_file_with_empty_term_list(self, runner, vague_file, tmp_path):
         domain = tmp_path / "domain.yml"
@@ -240,6 +302,20 @@ class TestOutputOptions:
 
         assert result.exit_code == 0, result.output
         assert "section filtering is not supported yet" in result.output
+
+    def test_redirected_output_is_utf8(self, vague_file):
+        """Reports contain '═'; a cp1252 locale (Windows) must not break redirected output."""
+        env = {**os.environ, "PYTHONIOENCODING": "cp1252", "ACADEMICLINT_LOG_LEVEL": "ERROR"}
+
+        proc = subprocess.run(  # noqa: S603 - fixed arguments
+            [sys.executable, "-m", "academiclint", "check", str(vague_file)],
+            capture_output=True,
+            env=env,
+            check=False,
+        )
+
+        assert proc.returncode == 0, proc.stderr.decode(errors="replace")
+        assert "═" in proc.stdout.decode("utf-8")
 
     def test_output_file_is_utf8(self, runner, vague_file, tmp_path):
         out = tmp_path / "report.txt"

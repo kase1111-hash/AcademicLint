@@ -1,23 +1,43 @@
 """Document parsing utilities for AcademicLint."""
 
 import re
+from dataclasses import dataclass
 from pathlib import Path
 
+# Marks the end of a heading's title until _finish splits headings off from
+# the text after them. Removed from the input first so it can't be forged.
+_HEADING_END = "\x1e"
 
-def parse_file(path: Path) -> str:
-    """Parse a file and extract text content.
 
-    Supports .md, .txt, and .tex files.
+@dataclass
+class ParsedText:
+    """Text extracted from a document, with a map back to the source lines."""
+
+    text: str
+    # Source line (1-based) of each line of text; None when they are the same
+    source_lines: list[int] | None = None
+
+    def source_line(self, line: int) -> int:
+        """Map a 1-based line of the extracted text to its line in the source."""
+        if self.source_lines is None or not 1 <= line <= len(self.source_lines):
+            return line
+        return self.source_lines[line - 1]
+
+
+def parse_document(path: Path | str) -> ParsedText:
+    """Parse a file and extract its text, with a map back to source lines.
+
+    Supports .md/.markdown, .tex and plain text files.
 
     Args:
         path: Path to the file
 
     Returns:
-        Extracted text content
+        Extracted text and its source line map
 
     Raises:
         FileNotFoundError: If the file doesn't exist
-        ValueError: If the file format is unsupported
+        UnicodeDecodeError: If the file is not valid UTF-8
     """
     path = Path(path)
 
@@ -30,14 +50,23 @@ def parse_file(path: Path) -> str:
         content = f.read()
 
     if suffix in (".md", ".markdown"):
-        return parse_markdown(content)
-    elif suffix == ".txt":
-        return content
-    elif suffix == ".tex":
-        return parse_latex(content)
-    else:
-        # Try to read as plain text
-        return content
+        return markdown_to_text(content)
+    if suffix == ".tex":
+        return latex_to_text(content)
+    # Plain text
+    return ParsedText(content)
+
+
+def parse_file(path: Path | str) -> str:
+    """Parse a file and extract text content.
+
+    Args:
+        path: Path to the file
+
+    Returns:
+        Extracted text content
+    """
+    return parse_document(path).text
 
 
 def _sub_keep_lines(pattern: str, repl: str, text: str, flags: int = 0) -> str:
@@ -59,24 +88,42 @@ def _blank(match: re.Match[str]) -> str:
     return " " * len(match.group(0))
 
 
-def _heading(match: re.Match[str], title: str) -> str:
-    """Return a heading's title, ending it as a sentence if text follows directly.
+def _finish(text: str) -> ParsedText:
+    """Split headings off from the text after them and map lines to the source.
 
-    A heading on the line right above its text would otherwise run into the
-    first sentence; a period separates them without adding a line.
+    Every step before this keeps the source's line breaks. A heading directly
+    followed by text (on its own line or the next) would run into the first
+    sentence, so a blank line is added after it to make it a paragraph of its
+    own; the added lines are recorded so line numbers still match the source.
     """
-    title = title.strip()
-    next_line = match.string[match.end() :].split("\n", 2)
-    if len(next_line) > 1 and next_line[1].strip() and title and title[-1] not in ".:?!":
-        return title + "."
-    return title
+    lines = text.split("\n")
+    out: list[str] = []
+    source: list[int] = []
+    for number, line in enumerate(lines, 1):
+        if _HEADING_END not in line:
+            out.append(line)
+            source.append(number)
+            continue
+
+        title, _, rest = line.partition(_HEADING_END)
+        rest = rest.replace(_HEADING_END, "").strip()
+        out.append(title.rstrip())
+        source.append(number)
+        if rest:
+            # Text on the heading's own line, e.g. \section{Results} We found...
+            out += ["", rest]
+            source += [number, number]
+        elif number < len(lines) and lines[number].strip():
+            # Text on the next line
+            out.append("")
+            source.append(number)
+
+    text = "\n".join(out).rstrip()
+    return ParsedText(text, source[: text.count("\n") + 1])
 
 
 def parse_markdown(content: str) -> str:
     """Parse Markdown content and extract text.
-
-    Removes Markdown formatting while preserving text structure. Every line
-    of the input is kept, so line numbers match the source file.
 
     Args:
         content: Raw Markdown content
@@ -84,7 +131,21 @@ def parse_markdown(content: str) -> str:
     Returns:
         Plain text with formatting removed
     """
-    text = content
+    return markdown_to_text(content).text
+
+
+def markdown_to_text(content: str) -> ParsedText:
+    """Parse Markdown content and extract text, with a map back to source lines.
+
+    Removes Markdown formatting while preserving text structure.
+
+    Args:
+        content: Raw Markdown content
+
+    Returns:
+        Plain text with formatting removed, and its source line map
+    """
+    text = content.replace(_HEADING_END, "")
 
     # Remove code blocks
     text = _sub_keep_lines(r"```[\s\S]*?```", "", text)
@@ -103,10 +164,11 @@ def parse_markdown(content: str) -> str:
     text = re.sub(r"^[-*_]{3,}[ \t]*$", "", text, flags=re.MULTILINE)
 
     # Remove heading markers but keep text. Line-start markers become spaces
-    # of the same width so columns on those lines still match the source.
+    # of the same width so columns on those lines still match the source. A
+    # closing run of #'s only counts after a space, so "C#" keeps its '#'.
     text = re.sub(
-        r"^(#{1,6}[ \t]+)(.*?)[ \t#]*$",
-        lambda m: " " * len(m.group(1)) + _heading(m, m.group(2)),
+        r"^([ \t]{0,3}#{1,6}[ \t]+)(.*?)(?:[ \t]+#+)?[ \t]*$",
+        lambda m: " " * len(m.group(1)) + m.group(2) + _HEADING_END,
         text,
         flags=re.MULTILINE,
     )
@@ -123,14 +185,11 @@ def parse_markdown(content: str) -> str:
     text = re.sub(r"^[ \t]*[-*+][ \t]+", _blank, text, flags=re.MULTILINE)
     text = re.sub(r"^[ \t]*\d+\.[ \t]+", _blank, text, flags=re.MULTILINE)
 
-    return text.rstrip()
+    return _finish(text)
 
 
 def parse_latex(content: str) -> str:
     """Parse LaTeX content and extract text.
-
-    Removes LaTeX commands while preserving text content. Every line of the
-    input is kept, so line numbers match the source file.
 
     Args:
         content: Raw LaTeX content
@@ -138,7 +197,21 @@ def parse_latex(content: str) -> str:
     Returns:
         Plain text with LaTeX commands removed
     """
-    text = content
+    return latex_to_text(content).text
+
+
+def latex_to_text(content: str) -> ParsedText:
+    """Parse LaTeX content and extract text, with a map back to source lines.
+
+    Removes LaTeX commands while preserving text content.
+
+    Args:
+        content: Raw LaTeX content
+
+    Returns:
+        Plain text with LaTeX commands removed, and its source line map
+    """
+    text = content.replace(_HEADING_END, "")
 
     # Remove comments
     text = re.sub(r"%.*$", "", text, flags=re.MULTILINE)
@@ -165,10 +238,10 @@ def parse_latex(content: str) -> str:
     text = _sub_keep_lines(r"\\begin\{equation\}[\s\S]*?\\end\{equation\}", "", text)
     text = _sub_keep_lines(r"\\begin\{align\}[\s\S]*?\\end\{align\}", "", text)
 
-    # Convert section commands to text
+    # Convert section commands to their titles
     text = re.sub(
-        r"\\(section|subsection|subsubsection|chapter)\*?\{([^}\n]+)\}",
-        lambda m: _heading(m, m.group(2)),
+        r"\\(?:section|subsection|subsubsection|chapter)\*?(?:\[[^\]\n]*\])?\{([^}\n]+)\}",
+        lambda m: m.group(1).strip() + _HEADING_END,
         text,
     )
 
@@ -176,13 +249,13 @@ def parse_latex(content: str) -> str:
     text = re.sub(r"\\(textbf|textit|emph|underline)\{([^}]+)\}", r"\2", text)
 
     # Remove citations (keep as placeholder)
-    text = re.sub(r"\\cite\{[^}]+\}", "[citation]", text)
+    text = _sub_keep_lines(r"\\cite\{[^}]+\}", "[citation]", text)
 
     # Remove references
-    text = re.sub(r"\\ref\{[^}]+\}", "[ref]", text)
+    text = _sub_keep_lines(r"\\ref\{[^}]+\}", "[ref]", text)
 
     # Remove labels
-    text = re.sub(r"\\label\{[^}]+\}", "", text)
+    text = _sub_keep_lines(r"\\label\{[^}]+\}", "", text)
 
     # Remove other common commands
     text = re.sub(r"\\(newpage|clearpage|pagebreak)", "", text)
@@ -197,4 +270,4 @@ def parse_latex(content: str) -> str:
     # Clean up braces
     text = re.sub(r"[{}]", "", text)
 
-    return text.rstrip()
+    return _finish(text)

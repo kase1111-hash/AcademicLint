@@ -283,11 +283,11 @@ class Linter:
         validated_path = validate_file_path(path, must_exist=True, check_extension=True)
         logger.debug("File validated: %s", validated_path)
 
-        from academiclint.core.parser import parse_file
+        from academiclint.core.parser import parse_document
 
         try:
-            text = parse_file(validated_path)
-            logger.debug("File parsed: %d characters", len(text))
+            parsed = parse_document(validated_path)
+            logger.debug("File parsed: %d characters", len(parsed.text))
         except Exception as e:
             logger.error("Failed to parse file %s: %s", path, e)
             if isinstance(e, (ValidationError, FileNotFoundError, ParsingError)):
@@ -297,7 +297,14 @@ class Linter:
                 file_path=str(validated_path),
             ) from e
 
-        return self.check(text)
+        result = self.check(parsed.text)
+
+        # Report lines of the source file, not of the extracted text
+        if parsed.source_lines is not None:
+            for flag in result.flags:
+                flag.line = parsed.source_line(flag.line)
+
+        return result
 
     def check_files(self, paths: list[Path | str]) -> dict[Path, AnalysisResult]:
         """Analyze multiple files.
@@ -351,8 +358,9 @@ class Linter:
                     )
                 terms.extend(manager.get_terms(config.domain))
             if config.domain_file is not None:
-                # get_terms also includes the terms of the file's `parent` domain
-                terms.extend(manager.get_terms(str(config.domain_file)))
+                # Resolved, so a file named like a built-in domain is still read as a
+                # file; get_terms also includes the terms of the file's `parent`
+                terms.extend(manager.get_terms(str(Path(config.domain_file).resolve())))
         except (OSError, ValueError, yaml.YAMLError) as e:
             raise ConfigurationError(f"Failed to load domain vocabulary: {e}") from e
 

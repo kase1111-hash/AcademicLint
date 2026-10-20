@@ -547,6 +547,21 @@ class TestPreviouslyFixedBugs:
         assert [f for f in plain.flags if f.type == FlagType.JARGON_DENSE]
         assert not [f for f in with_terms.flags if f.type == FlagType.JARGON_DENSE]
 
+    def test_bug_hyphenated_domain_terms_ignored(self):
+        """
+        Bug: Domain terms were split on whitespace only, so "cross-validation"
+        never matched the words the text was tokenized into.
+        Expected: Hyphenated terms exempt their words, written either way.
+        """
+        text = "We tuned hyper-parameter search using cross validation and early-stopping regularization."
+        config = Config(domain_terms=["hyper-parameter", "cross-validation", "early-stopping"])
+
+        plain = Linter().check(text)
+        with_terms = Linter(config).check(text)
+
+        assert [f for f in plain.flags if f.type == FlagType.JARGON_DENSE]
+        assert not [f for f in with_terms.flags if f.type == FlagType.JARGON_DENSE]
+
     def test_bug_unknown_domain_silently_ignored(self):
         """
         Bug: An unknown domain name was accepted without any error.

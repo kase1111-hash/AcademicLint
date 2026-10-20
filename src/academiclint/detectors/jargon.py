@@ -22,16 +22,19 @@ class JargonDetector(Detector):
         """Detect jargon-dense passages in the document."""
         flags = []
 
-        # Build set of acceptable domain terms
+        # Build set of acceptable domain terms. Terms are compared by their word
+        # tokens, as the text is: a single-token term ("C++") exempts that word,
+        # and a multi-token term ("machine learning", "cross-validation") is
+        # matched as a phrase whose words are not counted as jargon.
         domain_terms = {t.lower() for t in config.domain_terms}
-
-        # Multi-word domain terms (e.g. "machine learning") are matched as
-        # phrases; the words they cover are not counted as jargon
-        phrase_patterns = [
-            re.compile(r"\b" + r"\s+".join(map(re.escape, term.split())) + r"\b", re.IGNORECASE)
-            for term in domain_terms
-            if len(term.split()) > 1
-        ]
+        phrase_patterns = []
+        for term in config.domain_terms:
+            tokens = re.findall(r"\w+", term.lower())
+            if len(tokens) == 1:
+                domain_terms.add(tokens[0])
+            elif len(tokens) > 1:
+                phrase = r"\W+".join(map(re.escape, tokens))
+                phrase_patterns.append(re.compile(rf"\b{phrase}\b", re.IGNORECASE))
 
         for sentence in doc.sentences:
             jargon_terms = []

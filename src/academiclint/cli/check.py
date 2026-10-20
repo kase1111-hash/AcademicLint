@@ -1,6 +1,7 @@
 """Check command implementation for AcademicLint CLI."""
 
 import dataclasses
+import io
 import sys
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -11,6 +12,7 @@ from academiclint.core.exceptions import (
     AcademicLintError,
     EmptyTextError,
     ParsingError,
+    ProcessingError,
     ValidationError,
 )
 from academiclint.utils.validation import SUPPORTED_EXTENSIONS
@@ -40,6 +42,11 @@ def run_check(
     output_path: str | None,
 ):
     """Run the check command, reporting expected failures without a traceback."""
+    # Reports contain characters such as '═' and '→'; write redirected output
+    # as UTF-8 whatever the locale (e.g. cp1252 on Windows)
+    if isinstance(sys.stdout, io.TextIOWrapper) and not sys.stdout.isatty():
+        sys.stdout.reconfigure(encoding="utf-8")
+
     try:
         _run_check(
             files=files,
@@ -119,7 +126,7 @@ def _run_check(
     failed = 0
     if not files or files == ("-",):
         # Read from stdin
-        result = linter.check(sys.stdin.read())
+        result = linter.check(_read_stdin())
         output_text = formatter.format(result)
         densities = [result.density]
     else:
@@ -163,7 +170,9 @@ def _check_files(linter: "Linter", files: tuple) -> tuple[dict[Path, "AnalysisRe
             else:
                 click.echo(f"Error: {path}: {e}", err=True)
                 failed += 1
-        except (ValidationError, ParsingError, OSError) as e:
+        except (ValidationError, ParsingError, ProcessingError, OSError) as e:
+            # ProcessingError: e.g. text longer than spaCy accepts. A missing
+            # model (ModelNotFoundError) still stops the run.
             click.echo(f"Error: {path}: {e}", err=True)
             failed += 1
 
@@ -193,10 +202,10 @@ def _expand_paths(files: tuple) -> list[tuple[Path, bool]]:
         found = sorted(
             p
             for p in path.rglob("*")
-            if p.is_file()
-            and p.suffix.lower() in SUPPORTED_EXTENSIONS
+            if p.suffix.lower() in SUPPORTED_EXTENSIONS
             # Skip hidden directories such as .git
             and not any(part.startswith(".") for part in p.relative_to(path).parts)
+            and _is_file(p)
         )
         if not found:
             raise ValidationError(
@@ -205,3 +214,28 @@ def _expand_paths(files: tuple) -> list[tuple[Path, bool]]:
             )
         paths.extend((p, True) for p in found)
     return paths
+
+
+def _is_file(path: Path) -> bool:
+    """Return whether path is a file, warning instead of failing if it can't be read."""
+    try:
+        return path.is_file()
+    except OSError as e:
+        click.echo(f"Warning: skipping {path}: {e}", err=True)
+        return False
+
+
+def _read_stdin() -> str:
+    """Read stdin as UTF-8, like input files.
+
+    Raises:
+        ParsingError: If stdin is not valid UTF-8
+    """
+    stream = getattr(sys.stdin, "buffer", None)
+    if stream is None:
+        return sys.stdin.read()
+    data: bytes = stream.read()
+    try:
+        return data.decode("utf-8")
+    except UnicodeDecodeError as e:
+        raise ParsingError(f"stdin is not valid UTF-8: {e}") from e
